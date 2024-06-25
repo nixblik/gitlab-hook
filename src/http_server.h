@@ -18,6 +18,7 @@
 #pragma once
 #include <chrono>
 #include <memory>
+#include <functional>
 #include <string>
 
 
@@ -26,7 +27,39 @@ namespace http {
 
 
 /// List of supported HTTP methods. Less than the usual.
-enum class method { get = 1, put, post };
+enum class method
+{ get = 1, put, post };
+
+
+// List of HTTP status codes. The most important ones.
+enum class code
+{
+  ok = 200,
+
+  bad_request                     = 400,
+  unauthorized                    = 401,
+  forbidden                       = 403,
+  not_found                       = 404,
+  method_not_allowed              = 405,
+  not_acceptable                  = 406,
+  payload_too_large               = 413,
+  uri_too_long                    = 414,
+  unsupported_media_type          = 415,
+  too_many_requests               = 429,
+  request_header_fields_too_large = 431,
+
+  internal_server_error           = 500,
+  not_implemented                 = 501,
+  bad_gateway                     = 502,
+  service_unavailable             = 503,
+  gateway_timeout                 = 504,
+  http_version_not_supported      = 505,
+  variant_also_negotiates         = 506,
+  insufficient_storage            = 507,
+  loop_detected                   = 508,
+  not_extended                    = 510,
+  network_authentication_required = 511,
+};
 
 
 
@@ -37,13 +70,25 @@ class request
     /// HTTP method of the request.
     http::method method() const noexcept;
 
-    /// The complete URL of the request.
+    /// The complete URL of the request. FIXME: Isn't it just the path?
     std::string_view url() const noexcept;
 
+    void accept() noexcept;
+
+    template<std::size_t N>
+    void respond(http::code code, const char (&body)[N])
+    { respond_static(code, body); }
+
+    void respond(http::code code, std::string&& body);
+
     struct impl;
+    enum class state;
+    explicit request(impl* pimpl) noexcept;
 
   private:
-    impl& m;
+    void respond_static(http::code code, std::string_view body);
+
+    impl* m;
 };
 
 
@@ -52,6 +97,8 @@ class request
 class server
 {
   public:
+    using handler_type = std::function<void(request)>;
+
     server();
     ~server();
 
@@ -83,6 +130,8 @@ class server
     /// Configures the timeout in \a seconds after which an inactive connection
     /// is terminated. Must be in range [0,300].
     void set_connection_timeout(std::chrono::seconds seconds) noexcept;
+
+    void add_handler(std::string path, handler_type handler);
 
     /// Starts the server, that is, opens the port and waits for requests.
     void start();

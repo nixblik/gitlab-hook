@@ -66,8 +66,16 @@ try {
 
   http::server httpd;
   httpd.set_ip(configuration["httpd"]["ip"].to_string());
-  httpd.set_port(configuration["httpd"]["ip"].to<std::uint16_t>());
+  httpd.set_port(configuration["httpd"]["port"].to<std::uint16_t>());
 
+  httpd.add_handler("/", [](http::request req)
+  {
+    log_info("handle %i at %s", req.method(), req.url().data());
+    req.respond(http::code::ok, "thank you");
+  });
+  httpd.start();
+
+  log_info("Starting gitlab-hook");
   sd_notify(0, "READY=1\nSTATUS=Normal operation\n");
   return 0;
 }

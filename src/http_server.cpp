@@ -1,25 +1,26 @@
 /*  Copyright 2024 Uwe Salomon <post@uwesalomon.de>
 
-    This file is part of Gitlab-hook.
+    This file is part of gitlab-hook.
 
-    Gitlab-hook is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+    Gitlab-hook is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by the Free
+    Software Foundation, either version 3 of the License, or (at your option)
+    any later version.
 
-    Gitlab-hook is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+    Gitlab-hook is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+    more details.
 
-    You should have received a copy of the GNU General Public License
-    along with Gitlab-hook.  If not, see <http://www.gnu.org/licenses/>.
+    You should have received a copy of the GNU General Public License along
+    with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
 #include "http_server.h"
 #include "log.h"
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstring>
+#include <map>
 #include <microhttpd.h>
 #include <optional>
 using namespace std::chrono_literals;
@@ -39,12 +40,20 @@ struct http::server::impl
   int connTimeout{0};
   std::intptr_t memLimit{0};
   std::size_t contentLimit{SIZE_MAX};
+  std::map<std::string,handler_type,std::less<>> handlers;
 
   static MHD_Result answerCb(void* cls, MHD_Connection* conn, const char* url, const char* method, const char* version, const char* upload, size_t* uploadSz, void** connCls) noexcept;
   static int completedCb(void* cls, MHD_Connection* conn, void** connCls, MHD_RequestTerminationCode toe) noexcept;
 
-  request::impl* newRequest(MHD_Connection* conn, const char* url, const char* method, const char* /*unused*/, const char* upload, size_t* uploadSz);
+  MHD_Result sendStaticResponse(MHD_Connection* conn, http::code code, std::string_view content) noexcept;
+  std::pair<request::impl*,MHD_Result> newRequest(MHD_Connection* conn, const char* url, const char* method);
+  const handler_type* findHandler(std::string_view path) const noexcept;
 };
+
+
+
+enum class http::request::state
+{ created, accepted, completed, responded };
 
 
 
@@ -52,7 +61,13 @@ struct http::request::impl
 {
   std::string_view url;
   http::method method;
+  request::state state{state::created};
+  MHD_PostProcessor* postProc{nullptr};
+  MHD_Response* response{nullptr};
+  std::string responseBody;
+  http::code responseCode;
 
+  ~impl();
   MHD_Result postProcess(const char* upload, std::size_t size) noexcept;
 };
 
@@ -144,6 +159,21 @@ void http::server::set_connection_timeout(std::chrono::seconds seconds) noexcept
 
 
 
+void http::server::add_handler(std::string path, handler_type handler)
+{
+  if (path.empty() || path.front() != '/')
+    throw std::invalid_argument{"invalid HTTP server path"};
+
+  if (path.back() == '/' && path.size() > 1)
+    path.pop_back();
+
+  bool inserted = m->handlers.try_emplace(std::move(path), std::move(handler)).second;
+  if (!inserted)
+    throw std::invalid_argument{"duplicate HTTP server path"};
+}
+
+
+
 struct server_options
 {
   constexpr static std::size_t capacity = 16;
@@ -210,10 +240,9 @@ void http::server::start()
   options.terminate();
 
   m->daemon = MHD_start_daemon(flags, m->port, nullptr, nullptr, &impl::answerCb, m.get(),
-                             MHD_OPTION_ARRAY, options.data,
-                             MHD_OPTION_NOTIFY_COMPLETED, reinterpret_cast<void*>(&impl::completedCb), m.get(),
-                             MHD_OPTION_END);
-
+                               MHD_OPTION_ARRAY, options.data,
+                               MHD_OPTION_NOTIFY_COMPLETED, reinterpret_cast<void*>(&impl::completedCb), m.get(),
+                               MHD_OPTION_END);
   if (!m->daemon)
     throw std::runtime_error("failed to start HTTP server");
 }
@@ -241,15 +270,15 @@ inline http::method methodFrom(const char* str)
 
 
 
-MHD_Result http::server::impl::answerCb(void* cls, MHD_Connection* conn, const char* url, const char* method, const char* version, const char* upload, size_t* uploadSz, void** connCls) noexcept
+MHD_Result http::server::impl::answerCb(void* cls, MHD_Connection* conn, const char* url, const char* method, const char*, const char* upload, size_t* uploadSz, void** connCls) noexcept
 try {
   auto self = static_cast<impl*>(cls);
 
   if (!*connCls)
   {
-    auto request = self->newRequest(conn, url, method, version, upload, uploadSz);
-    *connCls     = request;
-    return request ? MHD_YES : MHD_NO;
+    auto res = self->newRequest(conn, url, method);
+    *connCls = res.first;
+    return res.second;
   }
 
   auto request = static_cast<request::impl*>(*connCls);
@@ -261,6 +290,7 @@ try {
   }
 
   // FIXME: Finish upload, invoke handler
+  return MHD_NO;
 }
 catch (...) {
   auto self       = static_cast<impl*>(cls);
@@ -270,23 +300,74 @@ catch (...) {
 
 
 
-auto http::server::impl::newRequest(MHD_Connection* conn, const char* url, const char* method, const char* /*unused*/, const char* upload, size_t* uploadSz) -> request::impl*
+auto http::server::impl::newRequest(MHD_Connection* conn, const char* url, const char* method) -> std::pair<request::impl*,MHD_Result>
 {
   log_info("HTTP %s %s", method, url);
 
   auto httpMethod = methodFrom(method);
   if (httpMethod == http::method{})
-    return nullptr;
+    return {nullptr, sendStaticResponse(conn, http::code::method_not_allowed, "method not allowed")};
 
-  // FIXME: Check that URL has a handler.
+  auto handler = findHandler(url);
+  if (!handler)
+    return {nullptr, sendStaticResponse(conn, http::code::not_found, "not found")};
 
   auto request    = std::make_unique<request::impl>();
   request->method = httpMethod;
-  request->url    = url;
+  request->url    = url; // FIXME: Consider copying URL
 
-  // FIXME: Invoke handler
+  handler->operator()(http::request{request.get()});
 
-  return request.release();
+  MHD_Result result = MHD_NO;
+  switch (request->state)
+  {
+    case request::state::created:   request.reset(); result = MHD_NO; break;  // not handled at all
+    case request::state::accepted:  result = MHD_YES; break;
+    case request::state::completed: assert(false); request.reset(); result = MHD_NO; break;
+    case request::state::responded: result = MHD_queue_response(conn, static_cast<uint>(request->responseCode), request->response); break;
+  }
+
+  return {request.release(), result};
+}
+
+
+
+auto http::server::impl::findHandler(std::string_view path) const noexcept -> const handler_type*
+{
+  if (path.empty() || path.front() != '/')
+    return nullptr;
+
+  for (;;)
+  {
+    auto iter = handlers.find(path);
+    if (iter != handlers.end())
+      return &iter->second;
+
+    auto slash = path.rfind('/');
+    if (slash == 0)
+      break;
+
+    path = std::string_view{path.data(), slash};
+  }
+
+  auto iter = handlers.find(std::string_view{"/"});
+  if (iter != handlers.end())
+    return &iter->second;
+
+  return nullptr;
+}
+
+
+
+MHD_Result http::server::impl::sendStaticResponse(MHD_Connection* conn, http::code code, std::string_view content) noexcept
+{
+  auto response = MHD_create_response_from_buffer(content.size(), const_cast<char*>(content.data()), MHD_RESPMEM_PERSISTENT);
+  if (!response)
+    return MHD_NO; // TODO: Logging + error logging
+
+  auto result = MHD_queue_response(conn, static_cast<uint>(code), response);
+  MHD_destroy_response(response); // decrements refcount
+  return result;
 }
 
 
@@ -298,4 +379,73 @@ int http::server::impl::completedCb(void*, MHD_Connection*, void** connCls, MHD_
 
   delete request;
   return MHD_YES;
+}
+
+
+
+inline http::request::request(impl* pimpl) noexcept
+  : m{pimpl}
+{}
+
+
+
+http::request::impl::~impl()
+{
+  if (response)
+    MHD_destroy_response(response);
+}
+
+
+
+auto http::request::method() const noexcept -> http::method
+{ return m->method; }
+
+
+std::string_view http::request::url() const noexcept
+{ return m->url; }
+
+
+
+void http::request::accept() noexcept
+{
+  assert(m->state == state::created);
+  assert(m->method == method::put || m->method == method::post);
+
+  m->state = state::accepted;
+  m->postProc = nullptr; // FIXME: Create post processor
+}
+
+
+
+MHD_Result http::request::impl::postProcess(const char* upload, std::size_t size) noexcept
+{
+  if (postProc)
+    return MHD_post_process(postProc, upload, size);
+
+  // Request encoding was unknown FIXME: Assemble content, can we do this streaming?
+  return MHD_NO;
+}
+
+
+
+void http::request::respond(http::code code, std::string&& body)
+{
+  assert(!m->response);
+
+  m->responseBody.swap(body);
+  respond_static(code, m->responseBody);
+}
+
+
+
+void http::request::respond_static(http::code code, std::string_view body)
+{
+  assert(!m->response);
+
+  m->response = MHD_create_response_from_buffer(body.size(), const_cast<char*>(body.data()), MHD_RESPMEM_PERSISTENT);
+  if (!m->response)
+    throw std::runtime_error{"failed to create HTTP response"}; // FIXME: Is this rather an assertion?
+
+  m->responseCode = code;
+  m->state        = state::responded;
 }

@@ -102,14 +102,9 @@ class file
     item root() const noexcept;
 
     /// Whether the root item contains a child item with given \a key.
-    ///
-    /// \throws std::exception if the root item is not a dictionary.
     bool contains(std::string_view key) const;
 
     /// The child item with the given \a key.
-    ///
-    /// \throws std::exception if the root item is not a dictionary or if it
-    /// does not contain the \a key.
     item operator[](std::string_view key) const;
 
   private:

@@ -23,7 +23,10 @@
 enum class log_severity
 { fatal = 1, error, warning, info, debug };
 
-// FIXME: Add log level and make the log functions do that automatically.
+
+/// Suppresses log messages below the given \a severity.
+void set_log_level(log_severity severity) noexcept;
+
 
 /// Logs a fatal error message composed from a printf-like \a format string and
 /// the arguments. Then aborts the program.

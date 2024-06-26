@@ -1,7 +1,28 @@
+/*  Copyright 2024 Uwe Salomon <post@uwesalomon.de>
+
+    This file is part of gitlab-hook.
+
+    Gitlab-hook is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by the Free
+    Software Foundation, either version 3 of the License, or (at your option)
+    any later version.
+
+    Gitlab-hook is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+    more details.
+
+    You should have received a copy of the GNU General Public License along
+    with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
+*/
 #include "config.h"
 #include "http_server.h"
+#include "io_context.h"
 #include "log.h"
+#include "signal_listener.h"
+#include "watchdog.h"
 #include <boost/program_options.hpp>
+#include <csignal>
 #include <cstdlib>
 #include <iostream>
 #include <systemd/sd-daemon.h>
@@ -38,7 +59,7 @@ command_line::command_line(int argc, char** argv)
   if (vm.count("help"))
   {
     std::cout << EXECUTABLE" [OPTION]...\n\n"
-              << "Runs a Gitlab hook receiver.\n\n" // FIXME: Write --help text
+              << "Runs a Gitlab hook receiver.\n\n" // TODO: Write --help text
               << options;
     std::exit(0);
   }
@@ -62,21 +83,48 @@ command_line::command_line(int argc, char** argv)
 int main(int argc, char** argv)
 try {
   const command_line cmdline{argc, argv};
+  set_log_level(cmdline.logLevel);
+
+  log_info("using configuration file %s", cmdline.configFile.c_str());
   const auto configuration = config::file::load(cmdline.configFile);
 
-  http::server httpd;
+  io_context io;
+  watchdog watchdog{io};
+
+  signal_listener sigs{io};
+  sigs.add(SIGHUP, SIGINT, SIGTERM);
+  sigs.wait([&io](int sig)
+  {
+    log_warning("signal %i raised, quit application", sig);
+    io.stop();
+  });
+
+  http::server httpd{io};
   httpd.set_ip(configuration["httpd"]["ip"].to_string());
   httpd.set_port(configuration["httpd"]["port"].to<std::uint16_t>());
 
   httpd.add_handler("/", [](http::request req)
   {
-    log_info("handle %i at %s", req.method(), req.url().data());
-    req.respond(http::code::ok, "thank you");
+    log_info("handle %i at %s", static_cast<int>(req.method()), req.path().data());
+    log_info("  query %s=%s", "x", req.query("x").data());
+    log_info("  User-Agent=%s", req.header("User-Agent").data());
+    switch (req.method())
+    {
+      case http::method::get:  return req.respond(http::code::ok, "here you are\n");
+      case http::method::put:  return req.respond(http::code::method_not_allowed, "method not allowed\n");
+      case http::method::post: return req.accept([](http::request req)
+        {
+          log_info("finish %i at %s with %zu bytes", static_cast<int>(req.method()), req.path().data(), req.content().size());
+          req.respond(http::code::ok, "thank you\n");
+        });
+    }
   });
+
   httpd.start();
 
-  log_info("Starting gitlab-hook");
+  log_info("Started gitlab-hook");
   sd_notify(0, "READY=1\nSTATUS=Normal operation\n");
+  io.run();
   return 0;
 }
 catch (const std::exception& e)

@@ -1,25 +1,26 @@
 /*  Copyright 2024 Uwe Salomon <post@uwesalomon.de>
 
-    This file is part of REST Server Library.
+    This file is part of gitlab-hook.
 
-    REST Server Library is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+    Gitlab-hook is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by the Free
+    Software Foundation, either version 3 of the License, or (at your option)
+    any later version.
 
-    REST Server Library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+    Gitlab-hook is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+    more details.
 
-    You should have received a copy of the GNU General Public License
-    along with REST Server Library.  If not, see <http://www.gnu.org/licenses/>.
+    You should have received a copy of the GNU General Public License along
+    with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
 #include <chrono>
 #include <memory>
 #include <functional>
 #include <string>
+class io_context;
 
 
 
@@ -31,7 +32,7 @@ enum class method
 { get = 1, put, post };
 
 
-// List of HTTP status codes. The most important ones.
+// A selection of HTTP status codes.
 enum class code
 {
   ok = 200,
@@ -67,18 +68,38 @@ enum class code
 class request
 {
   public:
+    using handler_type = std::function<void(request)>;
+
     /// HTTP method of the request.
     http::method method() const noexcept;
 
-    /// The complete URL of the request. FIXME: Isn't it just the path?
-    std::string_view url() const noexcept;
+    /// The HTTP header entry with name \a key. Returns an empty string if not
+    /// present in this request.
+    std::string_view header(const char* key) const noexcept;
 
-    void accept() noexcept;
+    /// The URI-Path of the request.
+    std::string_view path() const noexcept;
 
+    /// The URI-Query value with given \a key. Returns an empty string if not
+    /// present in the URI.
+    std::string_view query(const char* key) const noexcept;
+
+    /// The body of a PUT or POST request.
+    const std::string& content() const noexcept;
+
+    /// Accepts a PUT or POST request and starts receiving its content(). After
+    /// the content has been received, invokes the \a handler to finish the
+    /// request.
+    void accept(handler_type handler) noexcept;
+
+    /// Sends a response to this request with given HTTP response \a code and
+    /// a constant string \a body.
     template<std::size_t N>
     void respond(http::code code, const char (&body)[N])
     { respond_static(code, body); }
 
+    /// Sends a response to this request with given HTTP response \a code and
+    /// \a body.
     void respond(http::code code, std::string&& body);
 
     struct impl;
@@ -99,7 +120,9 @@ class server
   public:
     using handler_type = std::function<void(request)>;
 
-    server();
+    /// Constructs the server, with asynchronous I/O being done via the given
+    /// I/O \a context.
+    explicit server(io_context& context);
     ~server();
 
     /// Whether the server is running.
@@ -131,6 +154,9 @@ class server
     /// is terminated. Must be in range [0,300].
     void set_connection_timeout(std::chrono::seconds seconds) noexcept;
 
+    /// Adds a \a handler for the given request \a path. The \a handler will be
+    /// invoked for all incoming requests that target \a path or a sub-path of
+    /// it, except if there is a more specified handler for that sub-path.
     void add_handler(std::string path, handler_type handler);
 
     /// Starts the server, that is, opens the port and waits for requests.

@@ -16,10 +16,12 @@
     with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
 #include "http_server.h"
+#include "io_context.h"
 #include "log.h"
 #include <arpa/inet.h>
 #include <cassert>
 #include <cstring>
+#include <event2/event.h>
 #include <map>
 #include <microhttpd.h>
 #include <optional>
@@ -27,11 +29,32 @@ using namespace std::chrono_literals;
 
 
 
+struct delete_event
+{
+  constexpr delete_event() noexcept = default;
+
+  void operator()(event* p) noexcept
+  { event_free(p); }
+};
+
+
+
+struct delete_response
+{
+  constexpr delete_response() noexcept = default;
+
+  void operator()(MHD_Response* p) noexcept
+  { MHD_destroy_response(p); }
+};
+
+
+
 struct http::server::impl
 {
+  io_context& io;
+  std::unique_ptr<event,delete_event> listener;
   MHD_Daemon* daemon{nullptr};
   struct timeval timeout;
-  std::exception_ptr exception{nullptr};
 
   std::optional<in_addr> address;
   uint16_t port{80};
@@ -42,11 +65,15 @@ struct http::server::impl
   std::size_t contentLimit{SIZE_MAX};
   std::map<std::string,handler_type,std::less<>> handlers;
 
+  static void eventCb(int fd, short what, void* cls) noexcept;
   static MHD_Result answerCb(void* cls, MHD_Connection* conn, const char* url, const char* method, const char* version, const char* upload, size_t* uploadSz, void** connCls) noexcept;
   static int completedCb(void* cls, MHD_Connection* conn, void** connCls, MHD_RequestTerminationCode toe) noexcept;
 
+  explicit impl(io_context& context) noexcept;
+  void listen();
   MHD_Result sendStaticResponse(MHD_Connection* conn, http::code code, std::string_view content) noexcept;
   std::pair<request::impl*,MHD_Result> newRequest(MHD_Connection* conn, const char* url, const char* method);
+  MHD_Result completeRequest(request::impl* request, MHD_Connection* conn);
   const handler_type* findHandler(std::string_view path) const noexcept;
 };
 
@@ -59,22 +86,28 @@ enum class http::request::state
 
 struct http::request::impl
 {
+  MHD_Connection* conn{nullptr};
   std::string_view url;
   http::method method;
   request::state state{state::created};
-  MHD_PostProcessor* postProc{nullptr};
-  MHD_Response* response{nullptr};
+  handler_type handler;
+  std::string content;
+  std::unique_ptr<MHD_Response,delete_response> response;
   std::string responseBody;
   http::code responseCode;
 
-  ~impl();
-  MHD_Result postProcess(const char* upload, std::size_t size) noexcept;
+  MHD_Result addContent(const char* upload, std::size_t size) noexcept;
 };
 
 
 
-http::server::server()
-  : m{new impl}
+http::server::server(io_context& context)
+  : m{new impl{context}}
+{}
+
+
+inline http::server::impl::impl(io_context& context) noexcept
+  : io{context}
 {}
 
 
@@ -245,12 +278,45 @@ void http::server::start()
                                MHD_OPTION_END);
   if (!m->daemon)
     throw std::runtime_error("failed to start HTTP server");
+
+  auto info = MHD_get_daemon_info(m->daemon, MHD_DAEMON_INFO_EPOLL_FD);
+  if (!info)
+    throw std::runtime_error{"HTTP server library does not support epoll"};
+
+  m->listener.reset(event_new(m->io.native_handle(), info->epoll_fd, EV_TIMEOUT|EV_READ, &impl::eventCb, m.get()));
+  m->listen();
+}
+
+
+
+void http::server::impl::listen()
+{
+  unsigned long long msecs;
+  if (MHD_get_timeout(daemon, &msecs) != MHD_YES)
+    msecs = 1000;
+
+  timeval tm;
+  tm.tv_sec  = msecs / 1000;
+  tm.tv_usec = static_cast<long>((msecs - static_cast<unsigned long long>(tm.tv_sec) * 1000u) * 1000);
+
+  event_add(listener.get(), &tm);
+}
+
+
+
+void http::server::impl::eventCb(int, short /*what*/, void* cls) noexcept
+{
+  auto self = static_cast<impl*>(cls);
+  MHD_run(self->daemon);
+  self->listen();
 }
 
 
 
 void http::server::stop() noexcept
 {
+  m->listener.reset();
+
   if (m->daemon)
   {
     MHD_stop_daemon(m->daemon);
@@ -284,17 +350,16 @@ try {
   auto request = static_cast<request::impl*>(*connCls);
   if (*uploadSz)
   {
-    auto result = request->postProcess(upload, *uploadSz);
+    auto result = request->addContent(upload, *uploadSz);
     *uploadSz   = 0;
     return result;
   }
 
-  // FIXME: Finish upload, invoke handler
-  return MHD_NO;
+  return self->completeRequest(request, conn);
 }
-catch (...) {
-  auto self       = static_cast<impl*>(cls);
-  self->exception = std::current_exception();
+catch (const std::exception& e)
+{
+  log_error("exception in HTTP handler: %s", e.what());
   return MHD_NO;
 }
 
@@ -313,21 +378,43 @@ auto http::server::impl::newRequest(MHD_Connection* conn, const char* url, const
     return {nullptr, sendStaticResponse(conn, http::code::not_found, "not found")};
 
   auto request    = std::make_unique<request::impl>();
+  request->conn   = conn;
   request->method = httpMethod;
-  request->url    = url; // FIXME: Consider copying URL
+  request->url    = url;
 
   handler->operator()(http::request{request.get()});
 
   MHD_Result result = MHD_NO;
   switch (request->state)
   {
-    case request::state::created:   request.reset(); result = MHD_NO; break;  // not handled at all
+    case request::state::created:   result = MHD_NO; break;  // handler did nothing
     case request::state::accepted:  result = MHD_YES; break;
-    case request::state::completed: assert(false); request.reset(); result = MHD_NO; break;
-    case request::state::responded: result = MHD_queue_response(conn, static_cast<uint>(request->responseCode), request->response); break;
+    case request::state::completed: assert(false); result = MHD_NO; break;
+    case request::state::responded: result = MHD_queue_response(conn, static_cast<uint>(request->responseCode), request->response.get()); break;
   }
 
   return {request.release(), result};
+}
+
+
+
+MHD_Result http::server::impl::completeRequest(request::impl* request, MHD_Connection* conn)
+{
+  assert(request->state == request::state::accepted);
+
+  request->state = request::state::completed;
+  request->handler(http::request{request});
+
+  MHD_Result result = MHD_NO;
+  switch (request->state)
+  {
+    case request::state::created:
+    case request::state::accepted:  assert(false); result = MHD_NO; break;
+    case request::state::completed: result = MHD_NO; break;  // handler did nothing
+    case request::state::responded: result = MHD_queue_response(conn, static_cast<uint>(request->responseCode), request->response.get()); break;
+  }
+
+  return result;
 }
 
 
@@ -388,42 +475,55 @@ inline http::request::request(impl* pimpl) noexcept
 {}
 
 
-
-http::request::impl::~impl()
-{
-  if (response)
-    MHD_destroy_response(response);
-}
-
-
-
 auto http::request::method() const noexcept -> http::method
 { return m->method; }
 
 
-std::string_view http::request::url() const noexcept
+std::string_view http::request::path() const noexcept
 { return m->url; }
 
 
 
-void http::request::accept() noexcept
+std::string_view http::request::header(const char* key) const noexcept
 {
-  assert(m->state == state::created);
-  assert(m->method == method::put || m->method == method::post);
-
-  m->state = state::accepted;
-  m->postProc = nullptr; // FIXME: Create post processor
+  const char* result = MHD_lookup_connection_value(m->conn, MHD_HEADER_KIND, key);
+  return result ? result : std::string_view{};
 }
 
 
 
-MHD_Result http::request::impl::postProcess(const char* upload, std::size_t size) noexcept
+std::string_view http::request::query(const char* key) const noexcept
 {
-  if (postProc)
-    return MHD_post_process(postProc, upload, size);
+  const char* result = MHD_lookup_connection_value(m->conn, MHD_GET_ARGUMENT_KIND, key);
+  return result ? result : std::string_view{};
+}
 
-  // Request encoding was unknown FIXME: Assemble content, can we do this streaming?
-  return MHD_NO;
+
+
+const std::string& http::request::content() const noexcept
+{
+  assert(m->method == method::put || m->method == method::post);
+  assert(m->state == state::completed);
+  return m->content;
+}
+
+
+
+void http::request::accept(handler_type handler) noexcept
+{
+  assert(m->method == method::put || m->method == method::post);
+  assert(m->state == state::created);
+
+  m->handler = std::move(handler);
+  m->state   = state::accepted;
+}
+
+
+
+MHD_Result http::request::impl::addContent(const char* upload, std::size_t size) noexcept
+{
+  content.append(upload, size);
+  return MHD_YES;
 }
 
 
@@ -442,9 +542,9 @@ void http::request::respond_static(http::code code, std::string_view body)
 {
   assert(!m->response);
 
-  m->response = MHD_create_response_from_buffer(body.size(), const_cast<char*>(body.data()), MHD_RESPMEM_PERSISTENT);
+  m->response.reset(MHD_create_response_from_buffer(body.size(), const_cast<char*>(body.data()), MHD_RESPMEM_PERSISTENT));
   if (!m->response)
-    throw std::runtime_error{"failed to create HTTP response"}; // FIXME: Is this rather an assertion?
+    throw std::runtime_error{"failed to create HTTP response"};
 
   m->responseCode = code;
   m->state        = state::responded;

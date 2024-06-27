@@ -64,7 +64,7 @@ command_line::command_line(int argc, char** argv)
   if (vm.count("help"))
   {
     std::cout << EXECUTABLE" [OPTION]...\n\n"
-              << "Runs a Gitlab hook receiver.\n\n" // TODO: Write --help text
+              << "Runs an HTTP(S) server that listens for Gitlab webhook events.\n\n"
               << options;
     std::exit(0);
   }

@@ -44,6 +44,9 @@ class item
     /// Whether the item has a string value.
     bool is_string() const noexcept;
 
+    /// The boolean value of the item.
+    bool to_bool() const;
+
     /// The integer value of the item, which must be in the range [\a low, \a high].
     int_type to_int_range(int_type low, int_type high) const;
 

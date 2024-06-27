@@ -11,7 +11,9 @@ add_executable(gitlab-hook
   src/io_context.h src/io_context.cpp
   src/signal_listener.h src/signal_listener.cpp
   src/watchdog.h src/watchdog.cpp
-  src/http_server.h src/http_server.cpp)
+  src/http_server.h src/http_server.cpp
+  src/hook.h src/hook.cpp
+  src/pipeline_hook.h src/pipeline_hook.cpp)
 target_compile_definitions(gitlab-hook PRIVATE
   EXECUTABLE="gitlab-hook"
   VERSION="1.0"

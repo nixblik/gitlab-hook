@@ -21,6 +21,7 @@
 #include <functional>
 #include <string>
 class io_context;
+struct sockaddr;
 
 
 
@@ -69,6 +70,9 @@ class request
 {
   public:
     using handler_type = std::function<void(request)>;
+
+    /// The address of the peer. May be nullptr.
+    const sockaddr* peer_address() const noexcept;
 
     /// HTTP method of the request.
     http::method method() const noexcept;

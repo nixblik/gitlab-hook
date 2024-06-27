@@ -16,6 +16,7 @@
     with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
 #include "config.h"
+#include "hook.h"
 #include "http_server.h"
 #include "io_context.h"
 #include "log.h"
@@ -26,6 +27,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <systemd/sd-daemon.h>
+#include <vector>
+using namespace std::chrono_literals;
 
 
 
@@ -80,6 +83,32 @@ command_line::command_line(int argc, char** argv)
 
 
 
+class http_server : public http::server
+{
+  public:
+    http_server(config::item cfg, io_context& io)
+      : http::server{io}
+    {
+      set_ip(cfg["ip"].to_string());
+      set_port(cfg["port"].to<std::uint16_t>());
+      set_connection_timeout(30s);
+
+      if (cfg.contains("max_connections"))
+        set_max_connections(cfg["max_connections"].to<int>());
+
+      if (cfg.contains("max_connections_per_ip"))
+        set_max_connections_per_ip(cfg["max_connections_per_ip"].to<int>());
+
+      if (cfg.contains("memory_limit"))
+        set_memory_limit(static_cast<size_t>(cfg["memory_limit"].to_int_range(0, SSIZE_MAX)));
+
+      if (cfg.contains("content_size_limit"))
+        set_content_size_limit(cfg["content_size_limit"].to<uint>());
+    }
+};
+
+
+
 int main(int argc, char** argv)
 try {
   const command_line cmdline{argc, argv};
@@ -99,30 +128,20 @@ try {
     io.stop();
   });
 
-  http::server httpd{io};
-  httpd.set_ip(configuration["httpd"]["ip"].to_string());
-  httpd.set_port(configuration["httpd"]["port"].to<std::uint16_t>());
-
-  httpd.add_handler("/", [](http::request req)
-  {
-    log_info("handle %i at %s", static_cast<int>(req.method()), req.path().data());
-    log_info("  query %s=%s", "x", req.query("x").data());
-    log_info("  User-Agent=%s", req.header("User-Agent").data());
-    switch (req.method())
-    {
-      case http::method::get:  return req.respond(http::code::ok, "here you are\n");
-      case http::method::put:  return req.respond(http::code::method_not_allowed, "method not allowed\n");
-      case http::method::post: return req.accept([](http::request req)
-        {
-          log_info("finish %i at %s with %zu bytes", static_cast<int>(req.method()), req.path().data(), req.content().size());
-          req.respond(http::code::ok, "thank you\n");
-        });
-    }
-  });
-
+  http_server httpd{configuration["httpd"], io};
   httpd.start();
 
-  log_info("Started gitlab-hook");
+  auto hooksCfg = configuration["hooks"];
+  std::vector<std::unique_ptr<hook>> hooks;
+  hooks.reserve(hooksCfg.size());
+  for (size_t i = 0, endi = hooksCfg.size(); i != endi; ++i)
+  {
+    auto hook = hook::create(hooksCfg[i]);
+    httpd.add_handler(std::string{hook->uri_path}, std::ref(*hook));
+    hooks.emplace_back(std::move(hook));
+  }
+
+  log_info("started gitlab-hook");
   sd_notify(0, "READY=1\nSTATUS=Normal operation\n");
   io.run();
   return 0;

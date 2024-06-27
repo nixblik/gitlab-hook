@@ -367,7 +367,7 @@ catch (const std::exception& e)
 
 auto http::server::impl::newRequest(MHD_Connection* conn, const char* url, const char* method) -> std::pair<request::impl*,MHD_Result>
 {
-  log_info("HTTP %s %s", method, url);
+  log_debug("received http %s %s", method, url);
 
   auto httpMethod = methodFrom(method);
   if (httpMethod == http::method{})
@@ -473,6 +473,17 @@ int http::server::impl::completedCb(void*, MHD_Connection*, void** connCls, MHD_
 inline http::request::request(impl* pimpl) noexcept
   : m{pimpl}
 {}
+
+
+
+const sockaddr* http::request::peer_address() const noexcept
+{
+  if (auto info = MHD_get_connection_info(m->conn, MHD_CONNECTION_INFO_CLIENT_ADDRESS))
+    return info->client_addr;
+  else
+    return nullptr;
+}
+
 
 
 auto http::request::method() const noexcept -> http::method

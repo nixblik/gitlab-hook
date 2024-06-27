@@ -78,6 +78,10 @@ bool config::item::is_string() const noexcept
 { return static_cast<native_ref>(mItem)->is_string(); }
 
 
+bool config::item::to_bool() const
+{ return static_cast<native_ref>(mItem)->as_boolean(); }
+
+
 
 auto config::item::to_int_range(int_type low, int_type high) const -> int_type
 {

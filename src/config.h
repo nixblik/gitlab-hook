@@ -41,6 +41,9 @@ class item
   public:
     explicit item(const void* native) noexcept;
 
+    /// The name of the configuration file.
+    std::string file_name() const noexcept;
+
     /// Whether the item has a string value.
     bool is_string() const noexcept;
 

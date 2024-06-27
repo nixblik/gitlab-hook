@@ -138,6 +138,14 @@ class server
     /// Configures the \a port on which the server listens for connections.
     void set_port(std::uint16_t port) noexcept;
 
+    /// Sets the server \a certificate and enables HTTPS. The buffer must be in
+    /// PEM format.
+    void set_local_cert(std::string certificate) noexcept;
+
+    /// Sets the private \a key of the server certificate. The buffer must be
+    /// in PEM format.
+    void set_private_key(std::string key) noexcept;
+
     /// Configures the maximum \a number of open connections which the server
     /// accepts simultaneously.
     void set_max_connections(int number) noexcept;

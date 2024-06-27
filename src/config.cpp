@@ -74,6 +74,10 @@ inline config::item::item(const void* native) noexcept
 {}
 
 
+std::string config::item::file_name() const noexcept
+{ return static_cast<native_ref>(mItem)->location().file_name(); }
+
+
 bool config::item::is_string() const noexcept
 { return static_cast<native_ref>(mItem)->is_string(); }
 

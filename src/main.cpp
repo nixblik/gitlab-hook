@@ -25,6 +25,8 @@
 #include <boost/program_options.hpp>
 #include <csignal>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <systemd/sd-daemon.h>
 #include <vector>
@@ -83,6 +85,33 @@ command_line::command_line(int argc, char** argv)
 
 
 
+static std::string load_file(config::item cfg)
+{
+  std::filesystem::path filepath{cfg.to_string()};
+  if (filepath.is_relative())
+  {
+    std::filesystem::path cfgFile{cfg.file_name()};
+    filepath = cfgFile.parent_path() / filepath;
+  }
+
+  std::ifstream in{filepath};
+  if (!in)
+    throw std::system_error{make_error_code(std::errc::no_such_file_or_directory), filepath};
+
+  in.seekg(0, std::ios::end);
+  auto size = in.tellg();
+  if (size <= 0)
+    throw std::system_error{make_error_code(std::errc::io_error), filepath};
+
+  std::string buffer(static_cast<size_t>(size), ' ');
+  in.seekg(0);
+  in.read(&buffer[0], size);
+
+  return buffer;
+}
+
+
+
 class http_server : public http::server
 {
   public:
@@ -92,6 +121,12 @@ class http_server : public http::server
       set_ip(cfg["ip"].to_string());
       set_port(cfg["port"].to<std::uint16_t>());
       set_connection_timeout(30s);
+
+      if (cfg.contains("certificate"))
+        set_local_cert(load_file(cfg["certificate"]));
+
+      if (cfg.contains("private_key"))
+        set_private_key(load_file(cfg["private_key"]));
 
       if (cfg.contains("max_connections"))
         set_max_connections(cfg["max_connections"].to<int>());

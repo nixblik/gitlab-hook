@@ -56,6 +56,8 @@ struct http::server::impl
   MHD_Daemon* daemon{nullptr};
   struct timeval timeout;
 
+  std::string localCert;
+  std::string privateKey;
   std::optional<in_addr> address;
   uint16_t port{80};
   int maxConns{0};
@@ -145,6 +147,19 @@ void http::server::set_port(std::uint16_t port) noexcept
 
 
 
+void http::server::set_local_cert(std::string certificate) noexcept
+{
+  assert(!certificate.empty());
+  m->localCert = std::move(certificate);
+}
+
+
+
+void http::server::set_private_key(std::string key) noexcept
+{ m->privateKey = std::move(key); }
+
+
+
 void http::server::set_max_connections(int number) noexcept
 {
   assert(!m->daemon);
@@ -207,13 +222,12 @@ void http::server::add_handler(std::string path, handler_type handler)
 
 
 
+template<std::size_t Capacity>
 struct server_options
 {
-  constexpr static std::size_t capacity = 16;
-
   void set(MHD_OPTION option, intptr_t value) noexcept
   {
-    assert(size < capacity);
+    assert(size < Capacity);
     data[size].option = option;
     data[size].value  = value;
     ++size;
@@ -221,7 +235,7 @@ struct server_options
 
   void set(MHD_OPTION option, void* value) noexcept
   {
-    assert(size < capacity);
+    assert(size < Capacity);
     data[size].option    = option;
     data[size].ptr_value = value;
     ++size;
@@ -229,13 +243,13 @@ struct server_options
 
   void terminate() noexcept
   {
-    assert(size < capacity);
+    assert(size < Capacity);
     data[size].option    = MHD_OPTION_END;
     data[size].ptr_value = nullptr;
     ++size;
   }
 
-  MHD_OptionItem data[capacity];
+  MHD_OptionItem data[Capacity];
   std::size_t size{0};
 };
 
@@ -246,7 +260,11 @@ void http::server::start()
   assert(!m->daemon);
 
   uint flags = MHD_USE_EPOLL;
-  server_options options;
+
+  if (!m->localCert.empty())
+    flags |= MHD_USE_TLS;
+
+  server_options<8> options;
   sockaddr_in address;
 
   if (m->address)
@@ -269,6 +287,12 @@ void http::server::start()
 
   if (m->connTimeout)
     options.set(MHD_OPTION_CONNECTION_TIMEOUT, m->connTimeout);
+
+  if (!m->localCert.empty())
+    options.set(MHD_OPTION_HTTPS_MEM_CERT, m->localCert.data());
+
+  if (!m->privateKey.empty())
+    options.set(MHD_OPTION_HTTPS_MEM_KEY, m->privateKey.data());
 
   options.terminate();
 

@@ -30,7 +30,8 @@ include(GoogleTest)
 
 add_executable(test-gitlab-hook
   test/test.h test/test_main.cpp
-  test/pipeline_event.json test/config.ini)
+  test/pipeline_event.json test/config.ini test/curl.sh
+  test/cert/generate.sh test/cert/cert.cfg)
 target_precompile_headers(test-gitlab-hook PRIVATE test/test.h)
 target_link_libraries(test-gitlab-hook gtest)
 gtest_discover_tests(test-gitlab-hook)

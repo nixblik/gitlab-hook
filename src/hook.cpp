@@ -51,8 +51,6 @@ hook::~hook()
 
 void hook::operator()(http::request request)
 {
-  // TODO: Only react on hook's uri_path with exact match
-
   char peerAddress[INET6_ADDRSTRLEN+1];
   if (!to_string(request.peer_address(), peerAddress))
   {
@@ -76,6 +74,13 @@ void hook::operator()(http::request request)
   {
     log_warning("bad request from %s to %s: method not allowed", peerAddress, uri_path.c_str());
     return request.respond(http::code::method_not_allowed, "method not allowed");
+  }
+
+  if (request.path() != uri_path)
+  {
+    auto rpath = request.path();
+    log_warning("bad request from %s to %.*s: not found", peerAddress, static_cast<int>(rpath.size()), rpath.data());
+    return request.respond(http::code::not_found, "not found");
   }
 
   log_info("request from %s to %s", peerAddress, uri_path.c_str());

@@ -7,13 +7,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
 add_executable(gitlab-hook
-  src/main.cpp src/config.h src/config.cpp src/log.h src/log.cpp
+  src/main.cpp
+  src/config.h src/config.cpp
+  src/log.h src/log.cpp
   src/io_context.h src/io_context.cpp
   src/signal_listener.h src/signal_listener.cpp
   src/watchdog.h src/watchdog.cpp
   src/http_server.h src/http_server.cpp
   src/hook.h src/hook.cpp
-  src/pipeline_hook.h src/pipeline_hook.cpp)
+  src/pipeline_hook.h src/pipeline_hook.cpp
+  src/process.h src/process.cpp
+  src/action_list.h src/action_list.cpp)
 target_compile_definitions(gitlab-hook PRIVATE
   EXECUTABLE="gitlab-hook"
   VERSION="1.0"
@@ -30,7 +34,7 @@ include(GoogleTest)
 
 add_executable(test-gitlab-hook
   test/test.h test/test_main.cpp
-  test/pipeline_event.json test/config.ini test/curl.sh
+  test/pipeline_event.json test/config.ini test/curl.sh test/script.sh
   test/cert/generate.sh test/cert/cert.cfg)
 target_precompile_headers(test-gitlab-hook PRIVATE test/test.h)
 target_link_libraries(test-gitlab-hook gtest)

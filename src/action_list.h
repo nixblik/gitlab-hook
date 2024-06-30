@@ -16,21 +16,27 @@
     with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
-#include "hook.h"
-#include <set>
+#include "process.h"
+#include <memory>
+class io_context;
 
 
 
-/// A webhook for the Gitlab "pipeline event".
-class pipeline_hook : public hook
+class action_list
 {
   public:
-    explicit pipeline_hook(config::item configuration);
+    explicit action_list(io_context& context);
 
-  protected:
-    void process(http::request request, const nlohmann::json& json) override;
+    static io_context& get_io_context() noexcept;
+    static void push(process process);
 
   private:
-    std::set<std::string_view> mJobNames;
-    bool mOnlyOnSuccess;
+    struct impl;
+    struct impl_delete
+    {
+      constexpr impl_delete() noexcept = default;
+      void operator()(impl* p) noexcept;
+    };
+
+    std::unique_ptr<impl,impl_delete> m;
 };

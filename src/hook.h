@@ -18,6 +18,7 @@
 #pragma once
 #include "config.h"
 #include "http_server.h"
+#include "process.h"
 #include <nlohmann/json_fwd.hpp>
 
 
@@ -42,14 +43,21 @@ class hook
   protected:
     /// Processes an incoming HTTP \a request, with its content already parsed
     /// to \a json. To be implemented in derived classes.
-    virtual void execute(http::request request, const nlohmann::json& json) = 0;
+    virtual void process(http::request request, const nlohmann::json& json) = 0;
+
+    /// Executes the hook's action (a shell script) with the given process
+    /// \a environment for the \a request. Amends the \a environment with
+    /// information from the \a request's \a json content.
+    void execute(http::request request, const nlohmann::json& json, process::environment environment) const;
 
   private:
     hook(const hook&) = delete;
     hook& operator=(const hook&) = delete;
 
     static bool to_string(const sockaddr* addr, char* buffer) noexcept;
+    static std::string_view gitlabServerFrom(const nlohmann::json& json);
 
     std::string_view mAllowedAddress;
     std::string_view mToken;
+    std::string_view mScript;
 };

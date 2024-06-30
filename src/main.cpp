@@ -15,6 +15,7 @@
     You should have received a copy of the GNU General Public License along
     with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
+#include "action_list.h"
 #include "config.h"
 #include "hook.h"
 #include "http_server.h"
@@ -154,6 +155,7 @@ try {
 
   io_context io;
   watchdog watchdog{io};
+  action_list actions{io};
 
   signal_listener sigs{io};
   sigs.add(SIGHUP, SIGINT, SIGTERM);
@@ -163,7 +165,7 @@ try {
     io.stop();
   });
 
-  http_server httpd{configuration["httpd"], io};
+  http_server httpd{configuration["httpd"], io}; // TODO: Make a status page
   httpd.start();
 
   auto hooksCfg = configuration["hooks"];

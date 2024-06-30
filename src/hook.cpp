@@ -15,6 +15,7 @@
     You should have received a copy of the GNU General Public License along
     with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
+#include "action_list.h"
 #include "hook.h"
 #include "log.h"
 #include "pipeline_hook.h"
@@ -40,6 +41,9 @@ hook::hook(config::item configuration)
 {
   if (configuration.contains("peer_address"))
     mAllowedAddress = configuration["peer_address"].to_string_view();
+
+  if (configuration.contains("script"))
+    mScript = configuration["script"].to_string_view();
 }
 
 
@@ -88,7 +92,7 @@ void hook::operator()(http::request request)
   {
     try {
       auto json = nlohmann::json::parse(request.content());
-      execute(request, json);
+      process(request, json);
     }
     catch (const nlohmann::json::exception& e)
     {
@@ -119,4 +123,46 @@ bool hook::to_string(const sockaddr* addr, char* buffer) noexcept
   }
 
   return inet_ntop(addr->sa_family, inaddr, buffer, INET6_ADDRSTRLEN+1);
+}
+
+
+
+void hook::execute(http::request request, const nlohmann::json& json, process::environment environment) const
+{
+  environment.set("CI_PROJECT_ID", std::to_string(json.at("project").at("id").get<int>()));
+  environment.set("CI_PROJECT_NAME", json.at("project").at("name").get_ref<const std::string&>());
+  environment.set("CI_PROJECT_SLUG", json.at("project").at("path_with_namespace").get_ref<const std::string&>());
+  environment.set("CI_GITLAB_URL", gitlabServerFrom(json));
+
+  if (json.contains("commit"))
+    environment.set("CI_COMMIT_ID", json.at("commit").at("id").get_ref<const std::string&>());
+
+  std::vector<std::string> args;
+  args.push_back("-c");
+  args.push_back(std::string{mScript});
+
+  class process proc{action_list::get_io_context()};
+  proc.set_program("/bin/sh"); // FIXME: Shell configurable
+  proc.set_arguments(std::move(args));
+  proc.set_environment(std::move(environment));
+  action_list::push(std::move(proc)); // FIXME: Log that action is started, and also when it has finished
+
+  request.respond(http::code::ok, {});
+}
+
+
+
+std::string_view hook::gitlabServerFrom(const nlohmann::json& json)
+{
+  std::string_view projectUrl = json.at("project").at("web_url").get_ref<const std::string&>();
+
+  auto protoPos = projectUrl.find("://");
+  if (protoPos == projectUrl.npos)
+    throw std::runtime_error{"invalid project.web_url in Gitlab JSON payload"};
+
+  auto serverPos = projectUrl.find('/', protoPos + 3);
+  if (serverPos == projectUrl.npos)
+    throw std::runtime_error{"invalid project.web_url in Gitlab JSON payload"};
+
+  return projectUrl.substr(0, serverPos);
 }

@@ -35,7 +35,7 @@ pipeline_hook::pipeline_hook(config::item configuration)
 
 
 
-void pipeline_hook::execute(http::request request, const nlohmann::json& json)
+void pipeline_hook::process(http::request request, const nlohmann::json& json)
 {
   if (request.header("X-Gitlab-Event") != "Pipeline Hook")
   {
@@ -49,10 +49,26 @@ void pipeline_hook::execute(http::request request, const nlohmann::json& json)
     return request.respond(http::code::ok, "ignored");
   }
 
-  for (const auto& job: json.at("builds").get_ref<const nlohmann::json::array_t&>())
-    if (mJobNames.contains(job.at("name").get_ref<const std::string&>()))
-      if (job.at("status").get_ref<const std::string&>() == "success")
-        log_info("  hit %s", job["name"].get_ref<const std::string&>().c_str());
+  std::vector<std::string_view> jobNames;
+  std::vector<std::string> jobIds;
 
-  request.respond(http::code::ok, {});
+  for (const auto& job: json.at("builds").get_ref<const nlohmann::json::array_t&>())
+  {
+    std::string_view jobName{job.at("name").get_ref<const std::string&>()};
+    if (mJobNames.contains(jobName) && job.at("status").get_ref<const std::string&>() == "success")
+    {
+      jobNames.push_back(jobName);
+      jobIds.push_back(std::to_string(job.at("id").get<int>()));
+    }
+  }
+
+  if (!jobNames.empty())
+  {
+    process::environment env;
+    env.set_list("CI_JOBNAMES", jobNames);
+    env.set_list("CI_JOBIDS", jobIds);
+    execute(request, json, std::move(env));
+  }
+  else
+    request.respond(http::code::ok, "no action");
 }

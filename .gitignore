@@ -1,3 +1,10 @@
+/debian/*.log
+/debian/*.substvars
+/debian/*.debhelper
+/debian/files
+/debian/debhelper-build-stamp
+/debian/gitlab-hook/
+/obj-*/
 /tmp/
 /CMakeLists.txt.user
 *.autosave

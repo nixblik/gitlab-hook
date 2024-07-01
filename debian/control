@@ -1,0 +1,21 @@
+Source: gitlab-hook
+Section: devel
+Priority: optional
+Maintainer: Uwe Salomon <post@uwesalomon.de>
+Build-Depends: debhelper-compat (= 13), cmake,
+               libboost-program-options-dev, libevent-dev, libmicrohttpd-dev,
+               libsystemd-dev, nlohmann-json-dev | nlohmann-json3-dev,
+               googletest | libgtest-dev
+Standards-Version: 4.6.0
+Homepage: https://github.com/nixblik/gitlab-hook
+Vcs-Git: https://github.com/nixblik/gitlab-hook.git
+Rules-Requires-Root: no
+
+Package: gitlab-hook
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Receives web hook events from Gitlab and executes scripts
+ Gitlab-hook is a configurable HTTPS server that receives webhook events from
+ Gitlab and processes them. If the event matches the configured criteria,
+ gitlab-hook executes the configured action. Typically, it executes a custom
+ script.

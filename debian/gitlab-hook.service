@@ -1,0 +1,16 @@
+[Unit]
+Description=Gitlab webhook event receiver
+Documentation=man:gitlab-hook(8)
+After=local-fs.target
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/gitlab-hook
+WatchdogSec=5s
+Restart=always
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target

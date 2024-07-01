@@ -65,7 +65,9 @@ command_line::command_line(int argc, char** argv)
   if (vm.count("help"))
   {
     std::cout << EXECUTABLE" [OPTION]...\n\n"
-              << "Runs an HTTP(S) server that listens for Gitlab webhook events.\n\n"
+              << "Runs an HTTP(S) server that listens for Gitlab webhook events and processes\n"
+              << "them. If the event matches the configured criteria, gitlab-hook executes the\n"
+              << "configured action. Typically, it executes a custom script.\n\n"
               << options;
     std::exit(0);
   }

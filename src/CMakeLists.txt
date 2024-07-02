@@ -18,6 +18,8 @@ target_link_libraries(gitlab-hook
   boost_program_options event_core microhttpd systemd)
 install(TARGETS gitlab-hook)
 
+include(coverage)
+target_enable_coverage(gitlab-hook)
 
 include(help2man)
 help2man(TARGET gitlab-hook SECTION 8 NAME "Webhook listener for Gitlab")

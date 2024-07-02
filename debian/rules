@@ -2,3 +2,6 @@
 
 %:
 	dh $@ 
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DDOXYGEN_JQUERY_PATH=/usr/share/javascript/jquery/jquery.min.js

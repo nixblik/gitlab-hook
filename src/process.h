@@ -38,6 +38,12 @@ class process
     /// via the I/O \a context.
     explicit process(io_context& context);
 
+    process(process&&) noexcept = default;
+    process& operator=(process&&) noexcept = default;
+
+    /// Kills the process if it is still running.
+    ~process() = default;
+
     /// Sets the \a program to start.
     void set_program(std::string program) noexcept;
 

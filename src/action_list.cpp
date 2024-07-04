@@ -88,8 +88,19 @@ void action_list::impl_delete::operator()(impl* p) noexcept
 { delete p; }
 
 
+
 action_list::impl::~impl()
-{ singleton = nullptr; }
+{
+  if (!actions.empty())
+  {
+    log_warning("%zu pending hook(s) will not be executed/completed:", actions.size());
+    for (const auto& action: actions)
+      log_warning("* %s", action.name);
+  }
+
+  singleton = nullptr;
+}
+
 
 
 io_context& action_list::get_io_context() noexcept

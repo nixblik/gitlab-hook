@@ -75,6 +75,8 @@ struct process::impl
   explicit impl(io_context& context) noexcept
     : io{context}
   {}
+
+  ~impl();
 };
 
 
@@ -103,6 +105,34 @@ process::process(io_context& context)
 
 void process::impl_delete::operator()(impl* p) noexcept
 { delete p; }
+
+
+
+process::impl::~impl()
+{
+  if (pid == -1)
+    return;
+
+  log_warning("terminating child process %s", program.c_str());
+  ::kill(pid, SIGTERM);
+
+  for (int i = 0; i <= 5; ++i)
+  {
+    usleep(1000);
+
+    siginfo_t sigInfo;
+    if (waitid(P_PID, static_cast<id_t>(pid), &sigInfo, WEXITED|WNOHANG) == 0)
+      if (sigInfo.si_pid == pid)
+        return;
+
+    if (i == 4)
+    {
+      log_warning("killing child process %s", program.c_str());
+      ::kill(pid, SIGKILL);
+    }
+  }
+}
+
 
 
 void process::set_program(std::string program) noexcept
@@ -191,6 +221,7 @@ void process::kill() noexcept
 
 process::list& process::list::singleton(io_context& context)
 {
+  // NOTE: The process list's life should rather be tied to the io_context.
   static list instance{context};
   return instance;
 }
@@ -207,7 +238,7 @@ process::list::list(io_context& context) noexcept
 
 inline void process::list::add(process::impl* process) noexcept
 {
-  // No need to sync here, application is single-threaded
+  // NOTE: No need to sync here, this application is single-threaded.
   process->next = mProcesses;
   mProcesses    = process;
 }
@@ -233,41 +264,42 @@ void process::list::onSigchld(int, short, void* cls) noexcept
 {
   auto self = static_cast<list*>(cls);
 
-  siginfo_t sigInfo;
-  sigInfo.si_pid = 0;
-
-  if (waitid(P_ALL, 0, &sigInfo, WEXITED|WNOHANG) == -1 && errno != ECHILD)
-    log_fatal("wait on child process failed: %s", strerror(errno));
-
-  if (sigInfo.si_pid == 0)
-    return;
-
-  for (auto iter = &self->mProcesses;; iter = &(*iter)->next)
+  for (;;)
   {
-    auto proc = *iter;
-    if (!proc)
-      break;
+    siginfo_t sigInfo;
+    if (waitid(P_ALL, 0, &sigInfo, WEXITED|WNOHANG) == -1 && errno != ECHILD)
+      log_fatal("wait on child process failed: %s", strerror(errno));
 
-    if (proc->pid != sigInfo.si_pid)
-      continue;
+    if (sigInfo.si_pid == 0)
+      return;
 
-    std::error_code error;
-    int exitCode{0};
-    switch (sigInfo.si_code)
+    for (auto iter = &self->mProcesses;; iter = &(*iter)->next)
     {
-      case CLD_EXITED: exitCode = sigInfo.si_status; break;
-      case CLD_KILLED:
-      case CLD_DUMPED: error = make_process_killed_error(sigInfo.si_status); break;
-      default:         assert(false); std::exit(-3);
+      auto proc = *iter;
+      if (!proc)
+        break;
+
+      if (proc->pid != sigInfo.si_pid)
+        continue;
+
+      std::error_code error;
+      int exitCode{0};
+      switch (sigInfo.si_code)
+      {
+        case CLD_EXITED: exitCode = sigInfo.si_status; break;
+        case CLD_KILLED:
+        case CLD_DUMPED: error = make_process_killed_error(sigInfo.si_status); break;
+        default:         assert(false); std::exit(-3);
+      }
+
+      *iter     = proc->next;
+      proc->pid = -1;
+
+      // Handler would have to be executed in process's io context but this application has just one thread
+      auto handler = std::move(proc->handler);
+      handler(error, exitCode);
+      break;
     }
-
-    *iter     = proc->next;
-    proc->pid = -1;
-
-    // Handler would have to be executed in process's io context but this application has just one thread
-    auto handler = std::move(proc->handler);
-    handler(error, exitCode);
-    break;
   }
 }
 

@@ -392,7 +392,7 @@ catch (const std::exception& e)
 
 auto http::server::impl::newRequest(MHD_Connection* conn, const char* url, const char* method) -> std::pair<request::impl*,MHD_Result>
 {
-  log_debug("received http %s %s", method, url);
+  log_debug("received HTTP %s %s", method, url);
 
   auto httpMethod = methodFrom(method);
   if (httpMethod == http::method{})
@@ -476,8 +476,12 @@ MHD_Result http::server::impl::sendStaticResponse(MHD_Connection* conn, http::co
 {
   auto response = MHD_create_response_from_buffer(content.size(), const_cast<char*>(content.data()), MHD_RESPMEM_PERSISTENT);
   if (!response)
-    return MHD_NO; // TODO: Logging + error logging
+  {
+    log_error("failed to create HTTP response");
+    return MHD_NO;
+  }
 
+  log_debug("respond HTTP %i", code);
   auto result = MHD_queue_response(conn, static_cast<uint>(code), response);
   MHD_destroy_response(response); // decrements refcount
   return result;
@@ -574,6 +578,9 @@ MHD_Result http::request::impl::addContent(const char* upload, std::size_t size)
   }
 
   responseCode = code::payload_too_large;
+  state        = state::responded;
+
+  log_debug("respond HTTP %i", responseCode);
   return MHD_YES;
 }
 
@@ -599,4 +606,6 @@ void http::request::respond_static(http::code code, std::string_view body)
 
   m->responseCode = code;
   m->state        = state::responded;
+
+  log_debug("respond HTTP %i", code);
 }

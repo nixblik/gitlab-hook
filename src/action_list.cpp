@@ -96,18 +96,18 @@ void action_list::impl::executeNext(int, short, void* cls) noexcept
 {
   auto  self   = static_cast<impl*>(cls);
   auto& action = self->actions.front();
-  log_info("execute action: %s", action.name);
+  log_info("executing hook %s", action.name);
 
   action.process.start([self](std::error_code error, int exitCode)
   {
     // FIXME: Also do some kind of timeout, configurable. Otherwise next action will never start
     auto& action = self->actions.front();
     if (error)
-      log_error("action %s failed: %s", action.name, error.message().c_str());
+      log_error("hook %s: %s", action.name, error.message().c_str());
     else if (exitCode != 0)
-      log_error("action %s failed: exited with code %i", action.name, exitCode);
+      log_error("hook %s: exited with code %i", action.name, exitCode);
     else
-      log_info("action successful: %s", action.name);
+      log_info("completed hook %s", action.name);
 
     self->actions.pop_front();
     if (!self->actions.empty())

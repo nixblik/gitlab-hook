@@ -69,6 +69,7 @@ class hook
     static std::string_view shellCommand;
 
     hook* findMatchingHookInChain(http::request request, const std::string& peerAddress) noexcept;
+    void log_request(http::request request, const std::string& peerAddress, const nlohmann::json& json) const;
 
     std::unique_ptr<hook> mChain;
     std::string_view mAllowedAddress;

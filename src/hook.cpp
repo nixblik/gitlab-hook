@@ -105,6 +105,8 @@ void hook::operator()(http::request request) const
       auto json     = nlohmann::json::parse(request.content());
       int  count    = 0;
 
+      log_request(request, peerAddress, json);
+
       for (const hook* iter = this; iter; iter = iter->mChain.get())
         if (iter->mToken == reqToken)
           if (iter->mAllowedAddress.empty() || peerAddress == iter->mAllowedAddress)
@@ -160,6 +162,23 @@ std::string hook::to_string(const sockaddr* addr)
 
 
 
+void hook::log_request(http::request request, const std::string& peerAddress, const nlohmann::json& json) const
+{
+  auto reqEvent = request.header("X-Gitlab-Event");
+  if (reqEvent.empty())
+    reqEvent = "(unspecified)";
+
+  const char* project = "(none)";
+  if (json.contains("project"))
+    project = json["project"].at("web_url").get_ref<const std::string&>().c_str();
+
+  log_info("received '%.*s' from %s to %s for project %s",
+           static_cast<int>(reqEvent.size()), reqEvent.data(),
+           peerAddress.c_str(), uri_path.c_str(), project);
+}
+
+
+
 auto hook::execute(http::request, const nlohmann::json& json, process::environment environment) const -> outcome
 {
   assert(!shellCommand.empty());
@@ -183,7 +202,7 @@ auto hook::execute(http::request, const nlohmann::json& json, process::environme
   proc.set_environment(std::move(environment));
   action_list::push(name.c_str(), std::move(proc));
 
-  log_debug("scheduled action: %s", name.c_str());
+  log_debug("scheduled hook %s", name.c_str());
   return outcome::accepted;
 }
 

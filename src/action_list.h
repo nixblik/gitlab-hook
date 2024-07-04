@@ -30,6 +30,18 @@ class action_list
     /// Constructs the global action list singleton.
     explicit action_list(io_context& context);
 
+    /// The number of hooks executed since start of the program.
+    static size_t executedCount() noexcept
+    { return actionsExecuted; }
+
+    /// The number of failed hooks since start of the program.
+    static size_t failedCount() noexcept
+    { return actionsFailed; }
+
+    /// Time when the last hook failed.
+    static time_t lastFailure() noexcept
+    { return actionFailTm; }
+
     /// The I/O context that must be used for constructing process objects.
     static io_context& get_io_context() noexcept;
 
@@ -45,6 +57,10 @@ class action_list
       constexpr impl_delete() noexcept = default;
       void operator()(impl* p) noexcept;
     };
+
+    static size_t actionsExecuted;
+    static size_t actionsFailed;
+    static time_t actionFailTm;
 
     std::unique_ptr<impl,impl_delete> m;
 };

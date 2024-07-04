@@ -28,7 +28,9 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <systemd/sd-daemon.h>
 #include <vector>
 using namespace std::chrono_literals;
@@ -147,6 +149,71 @@ class http_server : public http::server
 
 
 
+class StatusPage
+{
+  public:
+    void operator()(http::request request) const;
+
+  private:
+    const time_t mStart{std::time(nullptr)};
+};
+
+
+
+void StatusPage::operator()(http::request request) const
+{
+  if (request.method() != http::method::get)
+    return request.respond(http::code::method_not_allowed, "method not allowed");
+
+  struct tm startTm;
+  localtime_r(&mStart, &startTm);
+
+  auto lastFailure = action_list::lastFailure();
+  struct tm lastFailureTm;
+  localtime_r(&lastFailure, &lastFailureTm);
+
+  std::ostringstream body;
+  body << R"(<!doctype html>
+<html lang="en" class="h-100">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+ <title>Gitlab-Hook Status</title>
+ <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+</head>
+<body class="d-flex flex-column h-100">
+ <main role="main" class="flex-shrink-0">
+  <div class="container">
+   <h1 class="mt-5">Gitlab-Hook Status</h1>
+   <dl class="mt-4 row" id="infos">
+    <dt class="col-sm-3">Up since:</dt><dd class="col-sm-9">)" << std::put_time(&startTm, "%Y-%m-%d %X") << R"(</dd>
+    <dt class="col-sm-3">Good requests:</dt><dd class="col-sm-9">)" << hook::goodRequestCount() << R"(</dd>
+    <dt class="col-sm-3">Rejected requests:</dt><dd class="col-sm-9">)" << hook::requestCount() - hook::goodRequestCount() << R"(</dd>
+    <dt class="col-sm-3">Hooks scheduled:</dt><dd class="col-sm-9">)" << hook::scheduledCount() << R"(</dd>
+    <dt class="col-sm-3">Hooks executed:</dt><dd class="col-sm-9">)" << action_list::executedCount() << R"(</dd>
+    <dt class="col-sm-3">Hooks failed:</dt><dd class="col-sm-9">)" << action_list::failedCount() << R"(</dd>
+    <dt class="col-sm-3">Last failure:</dt><dd class="col-sm-9">)";
+      if (lastFailure) body << std::put_time(&lastFailureTm, "%Y-%m-%d %X"); body << R"(</dd>
+   </dl>
+  </div>
+ </main>
+ <footer class="footer mt-auto py-3">
+  <div class="container">
+   <span class="text-muted">
+    Gitlab-Hook v)" VERSION R"( &mdash; Copyright &copy; 2024 Uwe Salomon<br />
+    This program comes with ABSOLUTELY NO WARRANTY. This is free software, and you are welcome to
+    redistribute it <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">under certain conditions</a>.
+   </span>
+  </div>
+ </footer>
+</body>
+</html>)";
+
+  request.respond(http::code::ok, std::move(body).str());
+}
+
+
+
 int main(int argc, char** argv)
 try {
   const command_line cmdline{argc, argv};
@@ -167,8 +234,11 @@ try {
     io.stop();
   });
 
-  http_server httpd{configuration["httpd"], io}; // TODO: Make a status page
+  http_server httpd{configuration["httpd"], io};
   httpd.start();
+
+  StatusPage statusPage;
+  httpd.add_handler("/status", std::ref(statusPage));
 
   auto hooksCfg = configuration["hooks"];
   std::vector<std::unique_ptr<hook>> hooks;

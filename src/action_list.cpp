@@ -63,6 +63,9 @@ struct action_list::impl
 
 
 action_list::impl* action_list::impl::singleton = nullptr;
+size_t action_list::actionsExecuted{0};
+size_t action_list::actionsFailed{0};
+time_t action_list::actionFailTm{0};
 
 
 
@@ -124,8 +127,10 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
 {
   auto  self   = static_cast<impl*>(cls);
   auto& action = self->actions.front();
+
   log_info("executing hook %s", action.name);
   fflush(stderr);
+  ++actionsExecuted;
 
   action.process.start([self](std::error_code error, int exitCode) noexcept
   {
@@ -139,6 +144,12 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
       log_error("hook %s: exited with code %i", action.name, exitCode);
     else
       log_info("completed hook %s", action.name);
+
+    if (error || exitCode != 0)
+    {
+      ++actionsFailed;
+      actionFailTm = std::time(nullptr);
+    }
 
     self->actions.pop_front();
     if (!self->actions.empty())

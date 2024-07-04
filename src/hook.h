@@ -34,6 +34,19 @@ class hook
     /// Constructs a webhook from the given \a configuration.
     static std::unique_ptr<hook> create(config::item configuration);
 
+    /// The number of requests made to hooks since start of the program.
+    static size_t requestCount() noexcept
+    { return hooksRequests; }
+
+    /// The number of well-authorized requests made to hooks since start of the
+    /// program.
+    static size_t goodRequestCount() noexcept
+    { return hooksGoodRequests; }
+
+    /// The number of hooks scheduled since start of the program.
+    static size_t scheduledCount() noexcept
+    { return hooksScheduled; }
+
     /// Constructs the hook from the given \a configuration.
     explicit hook(config::item configuration);
 
@@ -68,6 +81,9 @@ class hook
     static std::string to_string(const sockaddr* addr);
     static std::string_view gitlabServerFrom(const nlohmann::json& json);
     static std::string_view shellCommand;
+    static size_t hooksRequests;
+    static size_t hooksGoodRequests;
+    static size_t hooksScheduled;
 
     hook* findMatchingHookInChain(http::request request, const std::string& peerAddress) noexcept;
     void log_request(http::request request, const std::string& peerAddress, const nlohmann::json& json) const;

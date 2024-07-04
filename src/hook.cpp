@@ -25,6 +25,9 @@
 
 
 std::string_view hook::shellCommand;
+size_t hook::hooksRequests{0};
+size_t hook::hooksGoodRequests{0};
+size_t hook::hooksScheduled{0};
 
 
 void hook::init_global(config::item configuration)
@@ -84,6 +87,8 @@ void hook::chain(std::unique_ptr<hook> other) noexcept
 
 void hook::operator()(http::request request) const
 {
+  ++hooksRequests;
+
   auto peerAddress = to_string(request.peer_address());
   if (peerAddress.empty())
     throw std::runtime_error{"failed to obtain peer address"};
@@ -110,6 +115,8 @@ void hook::operator()(http::request request) const
   request.accept([this, peerAddress = std::move(peerAddress)](http::request request) noexcept
   {
     try {
+      ++hooksGoodRequests;
+
       auto reqToken = request.header("X-Gitlab-Token");
       auto json     = nlohmann::json::parse(request.content());
       int  count    = 0;
@@ -212,6 +219,7 @@ auto hook::execute(http::request, const nlohmann::json& json, process::environme
   proc.set_user_group(mUserGroup);
   action_list::append(name.c_str(), std::move(proc), mTimeout);
 
+  ++hooksScheduled;
   log_debug("scheduled hook %s", name.c_str());
   return outcome::accepted;
 }

@@ -17,18 +17,25 @@
 */
 #pragma once
 #include "process.h"
+#include <chrono>
 #include <memory>
 class io_context;
 
 
 
+/// A list of actions = external processes to be executed. A singleton.
 class action_list
 {
   public:
+    /// Constructs the global action list singleton.
     explicit action_list(io_context& context);
 
+    /// The I/O context that must be used for constructing process objects.
     static io_context& get_io_context() noexcept;
-    static void push(const char* name, process process);
+
+    /// Appends a new \a process to be executed to the global list, with the
+    /// hook \a name for logging purposes.
+    static void append(const char* name, process process, std::chrono::seconds timeout);
 
   private:
     struct item;

@@ -24,10 +24,21 @@
 
 
 
+struct free_event
+{
+  constexpr free_event() noexcept = default;
+
+  void operator()(event* p) noexcept
+  { event_free(p); }
+};
+
+
+
 struct action_list::item
 {
   const char* name;
   class process process;
+  std::chrono::seconds timeout;
 };
 
 
@@ -37,13 +48,17 @@ struct action_list::impl
   static impl* singleton;
 
   io_context& io;
-  event* execEv;
+  std::unique_ptr<event,free_event> execEv;
+  std::unique_ptr<event,free_event> timeoutEv;
+  std::unique_ptr<event,free_event> killEv;
   std::list<item> actions;
 
   explicit impl(io_context& context) noexcept;
   ~impl();
 
-  static void executeNext(int, short, void* cls) noexcept;
+  static void executeNextAction(int, short, void* cls) noexcept;
+  static void terminateCurrentAction(int, short, void* cls) noexcept;
+  static void killCurrentAction(int, short, void* cls) noexcept;
 };
 
 
@@ -59,7 +74,9 @@ action_list::action_list(io_context& context)
 
 action_list::impl::impl(io_context& context) noexcept
   : io{context},
-    execEv{event_new(io.native_handle(), -1, 0, &executeNext, this)}
+    execEv{event_new(io.native_handle(), -1, 0, &executeNextAction, this)},
+    timeoutEv{event_new(io.native_handle(), -1, EV_TIMEOUT, &terminateCurrentAction, this)},
+    killEv{event_new(io.native_handle(), -1, EV_TIMEOUT, &killCurrentAction, this)}
 {
   assert(!singleton);
   singleton = this;
@@ -80,30 +97,32 @@ io_context& action_list::get_io_context() noexcept
 
 
 
-void action_list::push(const char* name, process process)
+void action_list::append(const char* name, process process, std::chrono::seconds timeout)
 {
   auto self = impl::singleton;
   assert(self);
 
-  self->actions.emplace_back(name, std::move(process));
+  self->actions.emplace_back(name, std::move(process), timeout);
   if (self->actions.size() == 1)
-    event_active(self->execEv, 0, 0);
+    event_active(self->execEv.get(), 0, 0);
 }
 
 
 
-void action_list::impl::executeNext(int, short, void* cls) noexcept
+void action_list::impl::executeNextAction(int, short, void* cls) noexcept
 {
   auto  self   = static_cast<impl*>(cls);
   auto& action = self->actions.front();
   log_info("executing hook %s", action.name);
 
-  action.process.start([self](std::error_code error, int exitCode)
+  action.process.start([self](std::error_code error, int exitCode) noexcept
   {
-    // FIXME: Also do some kind of timeout, configurable. Otherwise next action will never start
+    event_del(self->timeoutEv.get());
+    event_del(self->killEv.get());
+
     auto& action = self->actions.front();
     if (error)
-      log_error("hook %s: %s", action.name, error.message().c_str());
+      log_error("hook %s: %s", action.name, error.message().c_str());  // hope that message() does not throw
     else if (exitCode != 0)
       log_error("hook %s: exited with code %i", action.name, exitCode);
     else
@@ -111,6 +130,40 @@ void action_list::impl::executeNext(int, short, void* cls) noexcept
 
     self->actions.pop_front();
     if (!self->actions.empty())
-      event_active(self->execEv, 0, 0);
+      event_active(self->execEv.get(), 0, 0);
   });
+
+  timeval tm{};
+  tm.tv_sec = action.timeout.count();
+  event_add(self->timeoutEv.get(), &tm);
+}
+
+
+
+void action_list::impl::terminateCurrentAction(int, short, void* cls) noexcept
+{
+  auto  self   = static_cast<impl*>(cls);
+  auto& action = self->actions.front();
+
+  log_error("hook %s: timed out", action.name);
+  action.process.terminate();
+
+  timeval tm{};
+  tm.tv_sec = 1;
+  event_add(self->killEv.get(), &tm);
+}
+
+
+
+void action_list::impl::killCurrentAction(int, short, void* cls) noexcept
+{
+  auto  self   = static_cast<impl*>(cls);
+  auto& action = self->actions.front();
+
+  log_error("hook %s: killing process", action.name);
+  action.process.kill();
+
+  self->actions.pop_front();
+  if (!self->actions.empty())
+    event_active(self->execEv.get(), 0, 0);
 }

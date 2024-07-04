@@ -12,3 +12,5 @@ echo CI_JOBIDS = $CI_JOBIDS
 if [ "$2" = "param" ]; then
   exit 1
 fi
+
+sleep 5

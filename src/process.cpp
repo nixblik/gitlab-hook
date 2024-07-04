@@ -18,6 +18,7 @@
 #include "io_context.h"
 #include "log.h"
 #include "process.h"
+#include <cassert>
 #include <cerrno>
 #include <csignal>
 #include <cstdio>
@@ -35,9 +36,6 @@ class process_errors : public std::error_category
     static const process_errors& singleton() noexcept;
     const char* name() const noexcept override;
     std::string message(int code) const override;
-
-  private:
-
 };
 
 
@@ -84,7 +82,8 @@ class process::list
 {
   public:
     static process::list& singleton(io_context& context);
-    void push(process::impl* process);
+    void add(process::impl* process) noexcept;
+    void remove(process::impl* process) noexcept;
 
   private:
     explicit list(io_context& context) noexcept;
@@ -130,7 +129,7 @@ void process::start(handler_type handler)
     m->handler = std::move(handler);
     m->pid     = pid;
 
-    list::singleton(m->io).push(m.get());
+    list::singleton(m->io).add(m.get());
     return;
   }
 
@@ -163,6 +162,28 @@ void process::start(handler_type handler)
 
 
 
+void process::terminate() noexcept
+{
+  assert(m->pid != -1);
+  if (::kill(m->pid, SIGTERM) == -1)
+    log_error("failed to send termination signal to child process: %s", strerror(errno));
+}
+
+
+
+void process::kill() noexcept
+{
+  assert(m->pid != -1);
+  if (::kill(m->pid, SIGKILL) == -1)
+    log_error("failed to kill child process: %s", strerror(errno));
+
+  m->pid     = -1;
+  m->handler = handler_type{};
+  list::singleton(m->io).remove(m.get());
+}
+
+
+
 process::list& process::list::singleton(io_context& context)
 {
   static list instance{context};
@@ -179,11 +200,26 @@ process::list::list(io_context& context) noexcept
 
 
 
-inline void process::list::push(process::impl* process)
+inline void process::list::add(process::impl* process) noexcept
 {
   // No need to sync here, application is single-threaded
   process->next = mProcesses;
   mProcesses    = process;
+}
+
+
+
+inline void process::list::remove(process::impl* process) noexcept
+{
+  for (auto iter = &mProcesses;; iter = &(*iter)->next)
+  {
+    assert(*iter);
+    if (*iter == process)
+    {
+      *iter = process->next;
+      return;
+    }
+  }
 }
 
 
@@ -217,7 +253,7 @@ void process::list::onSigchld(int, short, void* cls) noexcept
       case CLD_EXITED: exitCode = sigInfo.si_status; break;
       case CLD_KILLED:
       case CLD_DUMPED: error = make_process_killed_error(sigInfo.si_status); break;
-      default:         continue; // should not happen
+      default:         assert(false); std::exit(-3);
     }
 
     *iter     = proc->next;

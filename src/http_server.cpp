@@ -29,9 +29,9 @@ using namespace std::chrono_literals;
 
 
 
-struct delete_event
+struct free_event
 {
-  constexpr delete_event() noexcept = default;
+  constexpr free_event() noexcept = default;
 
   void operator()(event* p) noexcept
   { event_free(p); }
@@ -52,7 +52,7 @@ struct delete_response
 struct http::server::impl
 {
   io_context& io;
-  std::unique_ptr<event,delete_event> listener;
+  std::unique_ptr<event,free_event> listener;
   MHD_Daemon* daemon{nullptr};
   struct timeval timeout;
 
@@ -481,7 +481,7 @@ MHD_Result http::server::impl::sendStaticResponse(MHD_Connection* conn, http::co
     return MHD_NO;
   }
 
-  log_debug("respond HTTP %i", code);
+  log_debug("respond HTTP %i", static_cast<int>(code));
   auto result = MHD_queue_response(conn, static_cast<uint>(code), response);
   MHD_destroy_response(response); // decrements refcount
   return result;
@@ -580,7 +580,7 @@ MHD_Result http::request::impl::addContent(const char* upload, std::size_t size)
   responseCode = code::payload_too_large;
   state        = state::responded;
 
-  log_debug("respond HTTP %i", responseCode);
+  log_debug("respond HTTP %i", static_cast<int>(responseCode));
   return MHD_YES;
 }
 
@@ -607,5 +607,5 @@ void http::request::respond_static(http::code code, std::string_view body)
   m->responseCode = code;
   m->state        = state::responded;
 
-  log_debug("respond HTTP %i", code);
+  log_debug("respond HTTP %i", static_cast<int>(code));
 }

@@ -50,6 +50,13 @@ class process
     /// process finishes or execution fails somehow.
     void start(handler_type handler);
 
+    /// Attempts to terminate the child process.
+    void terminate() noexcept;
+
+    /// Kills the child process. The handler given to start() will not be
+    /// executed.
+    void kill() noexcept;
+
   private:
     class  list;
     struct impl;

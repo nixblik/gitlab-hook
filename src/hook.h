@@ -75,4 +75,5 @@ class hook
     std::string_view mAllowedAddress;
     std::string_view mToken;
     std::string_view mScript;
+    std::chrono::seconds mTimeout;
 };

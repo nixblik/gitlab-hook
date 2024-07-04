@@ -49,7 +49,8 @@ std::unique_ptr<hook> hook::create(config::item configuration)
 hook::hook(config::item configuration)
   : uri_path{configuration["uri_path"].to_string()},
     name{configuration["name"].to_string()},
-    mToken{configuration["token"].to_string_view()}
+    mToken{configuration["token"].to_string_view()},
+    mTimeout{configuration["timeout"].to<std::chrono::seconds::rep>()}
 {
   if (configuration.contains("peer_address"))
     mAllowedAddress = configuration["peer_address"].to_string_view();
@@ -200,7 +201,7 @@ auto hook::execute(http::request, const nlohmann::json& json, process::environme
   proc.set_program(std::string{shellCommand});
   proc.set_arguments(std::move(args));
   proc.set_environment(std::move(environment));
-  action_list::push(name.c_str(), std::move(proc));
+  action_list::append(name.c_str(), std::move(proc), mTimeout);
 
   log_debug("scheduled hook %s", name.c_str());
   return outcome::accepted;

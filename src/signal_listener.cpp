@@ -23,9 +23,9 @@
 
 
 
-struct delete_event
+struct free_event
 {
-  constexpr delete_event() noexcept = default;
+  constexpr free_event() noexcept = default;
 
   void operator()(event* p) noexcept
   { event_free(p); }
@@ -36,7 +36,7 @@ struct delete_event
 struct signal_listener::impl
 {
   io_context& io;
-  std::map<int,std::unique_ptr<event,delete_event>> sigs;
+  std::map<int,std::unique_ptr<event,free_event>> sigs;
   handler_type handler;
 
   static void callback(int fd, short what, void* cls) noexcept;
@@ -68,7 +68,7 @@ void signal_listener::add(std::initializer_list<int> numbers)
     assert(!m->sigs.contains(number));
 
     auto ev = event_new(m->io.native_handle(), number, EV_SIGNAL|EV_PERSIST, &impl::callback, m.get());
-    m->sigs.try_emplace(number, std::unique_ptr<event,delete_event>{ev});
+    m->sigs.try_emplace(number, std::unique_ptr<event,free_event>{ev});
     event_add(ev, nullptr);
   }
 }

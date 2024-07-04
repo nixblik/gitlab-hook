@@ -19,6 +19,7 @@
 #include "config.h"
 #include "http_server.h"
 #include "process.h"
+#include "user_group.h"
 #include <nlohmann/json_fwd.hpp>
 
 
@@ -74,6 +75,7 @@ class hook
     std::unique_ptr<hook> mChain;
     std::string_view mAllowedAddress;
     std::string_view mToken;
-    std::string_view mScript;
+    std::string_view mCommand;
     std::chrono::seconds mTimeout;
+    user_group mUserGroup;
 };

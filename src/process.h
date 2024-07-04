@@ -16,6 +16,7 @@
     with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
+#include "user_group.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -45,6 +46,10 @@ class process
 
     /// Sets the \a environment the child process will execute in.
     void set_environment(environment environment) noexcept;
+
+    /// Sets the user and group the child process will \a impersonate and get
+    /// its access rights from.
+    void set_user_group(user_group impersonate) noexcept;
 
     /// Starts the child process. The \a handler will be executed when the
     /// process finishes or execution fails somehow.
@@ -93,8 +98,6 @@ class process::environment
   private:
     std::vector<std::string> mEntries;
 };
-
-
 
 extern template void process::environment::set_list(std::string_view, const std::vector<std::string>&);
 extern template void process::environment::set_list(std::string_view, const std::vector<std::string_view>&);

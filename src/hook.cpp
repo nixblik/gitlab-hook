@@ -27,11 +27,8 @@
 std::string_view hook::shellCommand;
 
 
-
 void hook::init_global(config::item configuration)
-{
-  shellCommand = configuration["shell"].to_string_view();
-}
+{ shellCommand = configuration["shell"].to_string_view(); }
 
 
 
@@ -46,17 +43,28 @@ std::unique_ptr<hook> hook::create(config::item configuration)
 
 
 
+inline user_group user_group_from(config::item configuration)
+{
+  if (configuration.contains("group"))
+    return user_group{configuration["user"].to_string(), configuration["group"].to_string()};
+  else
+    return user_group{configuration["user"].to_string()};
+}
+
+
+
 hook::hook(config::item configuration)
   : uri_path{configuration["uri_path"].to_string()},
     name{configuration["name"].to_string()},
     mToken{configuration["token"].to_string_view()},
+    mCommand{configuration["command"].to_string_view()},
     mTimeout{configuration["timeout"].to<std::chrono::seconds::rep>()}
 {
   if (configuration.contains("peer_address"))
     mAllowedAddress = configuration["peer_address"].to_string_view();
 
-  if (configuration.contains("script"))
-    mScript = configuration["script"].to_string_view();
+  if (configuration.contains("run_as") || getuid() == 0)
+    mUserGroup = user_group_from(configuration["run_as"]);
 }
 
 
@@ -195,12 +203,13 @@ auto hook::execute(http::request, const nlohmann::json& json, process::environme
   std::vector<std::string> args;
   args.reserve(2);
   args.push_back("-c");
-  args.push_back(std::string{mScript});
+  args.push_back(std::string{mCommand});
 
   class process proc{action_list::get_io_context()};
   proc.set_program(std::string{shellCommand});
   proc.set_arguments(std::move(args));
   proc.set_environment(std::move(environment));
+  proc.set_user_group(mUserGroup);
   action_list::append(name.c_str(), std::move(proc), mTimeout);
 
   log_debug("scheduled hook %s", name.c_str());

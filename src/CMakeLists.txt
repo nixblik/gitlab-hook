@@ -9,7 +9,8 @@ add_executable(gitlab-hook
   hook.h hook.cpp
   pipeline_hook.h pipeline_hook.cpp
   process.h process.cpp
-  action_list.h action_list.cpp)
+  action_list.h action_list.cpp
+  user_group.h user_group.cpp)
 target_compile_definitions(gitlab-hook PRIVATE
   EXECUTABLE="gitlab-hook"
   VERSION="${CMAKE_PROJECT_VERSION}"

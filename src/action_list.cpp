@@ -114,6 +114,7 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
   auto  self   = static_cast<impl*>(cls);
   auto& action = self->actions.front();
   log_info("executing hook %s", action.name);
+  fflush(stderr);
 
   action.process.start([self](std::error_code error, int exitCode) noexcept
   {

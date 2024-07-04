@@ -9,8 +9,9 @@ echo CI_COMMIT_ID = $CI_COMMIT_ID
 echo CI_JOBNAMES = $CI_JOBNAMES
 echo CI_JOBIDS = $CI_JOBIDS
 
+id
+sleep 5
+
 if [ "$2" = "param" ]; then
   exit 1
 fi
-
-sleep 5

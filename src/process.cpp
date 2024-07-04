@@ -67,6 +67,7 @@ struct process::impl
   std::string program;
   std::vector<std::string> args;
   environment env;
+  user_group user;
   handler_type handler;
   impl* next{nullptr};
   pid_t pid{-1};
@@ -116,6 +117,10 @@ void process::set_environment(environment environment) noexcept
 { m->env = std::move(environment); }
 
 
+void process::set_user_group(user_group impersonate) noexcept
+{ m->user = std::move(impersonate); }
+
+
 
 void process::start(handler_type handler)
 {
@@ -146,10 +151,10 @@ void process::start(handler_type handler)
       args.push_back(arg.c_str());
     args.push_back(nullptr);
 
+    if (m->user)
+      m->user.impersonate();
+
     auto env = m->env.get();
-
-    // FIXME: Change uid/gid
-
     execve(m->program.c_str(), const_cast<char* const*>(args.data()), const_cast<char* const*>(env.data()));
     throw std::system_error{errno, std::system_category()};
   }

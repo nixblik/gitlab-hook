@@ -33,37 +33,28 @@ enum class method
 { get = 1, put, post };
 
 
-// A selection of HTTP status codes. FIXME: Remove unused ones
+// A selection of HTTP status codes.
 enum class code
 {
-  ok         = 200,
-  created    = 201,
-  accepted   = 202,
-  no_content = 204,
+  ok                    = 200,
+  created               = 201,
+  accepted              = 202,
+  no_content            = 204,
 
-  bad_request                     = 400,
-  unauthorized                    = 401,
-  forbidden                       = 403,
-  not_found                       = 404,
-  method_not_allowed              = 405,
-  not_acceptable                  = 406,
-  payload_too_large               = 413,
-  uri_too_long                    = 414,
-  unsupported_media_type          = 415,
-  too_many_requests               = 429,
-  request_header_fields_too_large = 431,
+  bad_request           = 400,
+  unauthorized          = 401,
+  forbidden             = 403,
+  not_found             = 404,
+  method_not_allowed    = 405,
+  not_acceptable        = 406,
+  payload_too_large     = 413,
+  uri_too_long          = 414,
+  too_many_requests     = 429,
 
-  internal_server_error           = 500,
-  not_implemented                 = 501,
-  bad_gateway                     = 502,
-  service_unavailable             = 503,
-  gateway_timeout                 = 504,
-  http_version_not_supported      = 505,
-  variant_also_negotiates         = 506,
-  insufficient_storage            = 507,
-  loop_detected                   = 508,
-  not_extended                    = 510,
-  network_authentication_required = 511,
+  internal_server_error = 500,
+  not_implemented       = 501,
+  service_unavailable   = 503,
+  insufficient_storage  = 507,
 };
 
 

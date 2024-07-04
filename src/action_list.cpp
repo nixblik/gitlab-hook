@@ -24,13 +24,21 @@
 
 
 
+struct action_list::item
+{
+  const char* name;
+  class process process;
+};
+
+
+
 struct action_list::impl
 {
   static impl* singleton;
 
   io_context& io;
   event* execEv;
-  std::list<process> processes;
+  std::list<item> actions;
 
   explicit impl(io_context& context) noexcept;
   ~impl();
@@ -72,13 +80,13 @@ io_context& action_list::get_io_context() noexcept
 
 
 
-void action_list::push(process process)
+void action_list::push(const char* name, process process)
 {
   auto self = impl::singleton;
   assert(self);
 
-  self->processes.push_back(std::move(process));
-  if (self->processes.size() == 1)
+  self->actions.emplace_back(name, std::move(process));
+  if (self->actions.size() == 1)
     event_active(self->execEv, 0, 0);
 }
 
@@ -86,19 +94,23 @@ void action_list::push(process process)
 
 void action_list::impl::executeNext(int, short, void* cls) noexcept
 {
-  auto self = static_cast<impl*>(cls);
-  self->processes.front().start([self](std::error_code error, int exitCode)
+  auto  self   = static_cast<impl*>(cls);
+  auto& action = self->actions.front();
+  log_info("execute action: %s", action.name);
+
+  action.process.start([self](std::error_code error, int exitCode)
   {
     // FIXME: Also do some kind of timeout, configurable. Otherwise next action will never start
+    auto& action = self->actions.front();
     if (error)
-      log_error("action failed: %s", error.message().c_str()); // FIXME: Better error message
+      log_error("action %s failed: %s", action.name, error.message().c_str());
     else if (exitCode != 0)
-      log_error("action failed: exited with code %i", exitCode);
+      log_error("action %s failed: exited with code %i", action.name, exitCode);
     else
-      log_info("action executed successfully");
+      log_info("action successful: %s", action.name);
 
-    self->processes.pop_front();
-    if (!self->processes.empty())
+    self->actions.pop_front();
+    if (!self->actions.empty())
       event_active(self->execEv, 0, 0);
   });
 }

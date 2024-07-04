@@ -35,19 +35,13 @@ pipeline_hook::pipeline_hook(config::item configuration)
 
 
 
-void pipeline_hook::process(http::request request, const nlohmann::json& json)
+auto pipeline_hook::process(http::request request, const nlohmann::json& json) const -> outcome
 {
   if (request.header("X-Gitlab-Event") != "Pipeline Hook")
-  {
-    log_debug("request discarded: bad event type");
-    return request.respond(http::code::not_found, "not a pipeline event");
-  }
+    return outcome::ignored;
 
   if (mOnlyOnSuccess && json.at("object_attributes").at("status").get_ref<const std::string&>() != "success")
-  {
-    log_debug("request discarded: pipeline not successful");
-    return request.respond(http::code::ok, "ignored");
-  }
+    return outcome::ignored;
 
   std::vector<std::string_view> jobNames;
   std::vector<std::string> jobIds;
@@ -62,13 +56,12 @@ void pipeline_hook::process(http::request request, const nlohmann::json& json)
     }
   }
 
-  if (!jobNames.empty())
-  {
-    process::environment env;
-    env.set_list("CI_JOBNAMES", jobNames);
-    env.set_list("CI_JOBIDS", jobIds);
-    execute(request, json, std::move(env));
-  }
-  else
-    request.respond(http::code::ok, "no action");
+  if (jobNames.empty())
+    return outcome::ignored;
+
+  process::environment env;
+  env.set_list("CI_JOBNAMES", jobNames);
+  env.set_list("CI_JOBIDS", jobIds);
+
+  return execute(request, json, std::move(env));
 }

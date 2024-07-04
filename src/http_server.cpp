@@ -96,6 +96,7 @@ struct http::request::impl
   std::string content;
   std::unique_ptr<MHD_Response,delete_response> response;
   std::string responseBody;
+  size_t contentLimit;
   http::code responseCode;
 
   MHD_Result addContent(const char* upload, std::size_t size) noexcept;
@@ -350,7 +351,7 @@ void http::server::stop() noexcept
 
 
 
-inline http::method methodFrom(const char* str)
+inline http::method methodFrom(const char* str) noexcept
 {
   if (strcmp(str, "GET")  == 0) return http::method::get;
   if (strcmp(str, "PUT")  == 0) return http::method::put;
@@ -401,10 +402,11 @@ auto http::server::impl::newRequest(MHD_Connection* conn, const char* url, const
   if (!handler)
     return {nullptr, sendStaticResponse(conn, http::code::not_found, "not found")};
 
-  auto request    = std::make_unique<request::impl>();
-  request->conn   = conn;
-  request->method = httpMethod;
-  request->url    = url;
+  auto request          = std::make_unique<request::impl>();
+  request->conn         = conn;
+  request->method       = httpMethod;
+  request->url          = url;
+  request->contentLimit = contentLimit;
 
   handler->operator()(http::request{request.get()});
 
@@ -557,7 +559,21 @@ void http::request::accept(handler_type handler) noexcept
 
 MHD_Result http::request::impl::addContent(const char* upload, std::size_t size) noexcept
 {
-  content.append(upload, size);
+  if (content.size() + size <= contentLimit)
+  {
+    content.append(upload, size);
+    return MHD_YES;
+  }
+
+  assert(!response);
+  response.reset(MHD_create_response_from_buffer(0, nullptr, MHD_RESPMEM_PERSISTENT));
+  if (!response)
+  {
+    log_error("failed to create HTTP response");
+    return MHD_NO;
+  }
+
+  responseCode = code::payload_too_large;
   return MHD_YES;
 }
 

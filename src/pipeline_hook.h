@@ -28,7 +28,7 @@ class pipeline_hook : public hook
     explicit pipeline_hook(config::item configuration);
 
   protected:
-    void process(http::request request, const nlohmann::json& json) override;
+    outcome process(http::request request, const nlohmann::json& json) const override;
 
   private:
     std::set<std::string_view> mJobNames;

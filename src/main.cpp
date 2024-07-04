@@ -173,11 +173,21 @@ try {
   auto hooksCfg = configuration["hooks"];
   std::vector<std::unique_ptr<hook>> hooks;
   hooks.reserve(hooksCfg.size());
+  hook::init_global(configuration.root());
+
   for (size_t i = 0, endi = hooksCfg.size(); i != endi; ++i)
   {
-    auto hook = hook::create(hooksCfg[i]);
-    httpd.add_handler(std::string{hook->uri_path}, std::ref(*hook));
-    hooks.emplace_back(std::move(hook));
+    auto nhook = hook::create(hooksCfg[i]);
+    auto same  = std::find_if(hooks.rbegin(), hooks.rend(), [&nhook](const std::unique_ptr<hook>& other)
+    { return nhook->uri_path == other->uri_path; });
+
+    if (same == hooks.rend())
+    {
+      httpd.add_handler(std::string{nhook->uri_path}, std::ref(*nhook));
+      hooks.emplace_back(std::move(nhook));
+    }
+    else
+      (*same)->chain(std::move(nhook));
   }
 
   log_info("started gitlab-hook");

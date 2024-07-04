@@ -8,3 +8,7 @@ echo CI_GITLAB_URL = $CI_GITLAB_URL
 echo CI_COMMIT_ID = $CI_COMMIT_ID
 echo CI_JOBNAMES = $CI_JOBNAMES
 echo CI_JOBIDS = $CI_JOBIDS
+
+if [ "$2" = "param" ]; then
+  exit 1
+fi

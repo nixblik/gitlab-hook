@@ -33,10 +33,13 @@ enum class method
 { get = 1, put, post };
 
 
-// A selection of HTTP status codes.
+// A selection of HTTP status codes. FIXME: Remove unused ones
 enum class code
 {
-  ok = 200,
+  ok         = 200,
+  created    = 201,
+  accepted   = 202,
+  no_content = 204,
 
   bad_request                     = 400,
   unauthorized                    = 401,

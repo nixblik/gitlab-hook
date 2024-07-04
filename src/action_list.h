@@ -28,9 +28,10 @@ class action_list
     explicit action_list(io_context& context);
 
     static io_context& get_io_context() noexcept;
-    static void push(process process);
+    static void push(const char* name, process process);
 
   private:
+    struct item;
     struct impl;
     struct impl_delete
     {

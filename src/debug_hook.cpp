@@ -39,5 +39,5 @@ auto debug_hook::process(http::request request, const nlohmann::json& json) cons
          json.dump(2, ' ', true, nlohmann::json::error_handler_t::replace).c_str());
 
   fflush(stdout);
-  return outcome::accepted;
+  return execute(request, json, process::environment{});
 }

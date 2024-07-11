@@ -4,7 +4,7 @@ Priority: optional
 Maintainer: Uwe Salomon <post@uwesalomon.de>
 Build-Depends: debhelper-compat (= 13), cmake,
                libboost-program-options-dev, libevent-dev, libmicrohttpd-dev,
-               libsystemd-dev, nlohmann-json-dev | nlohmann-json3-dev,
+               libsystemd-dev, libtoml11-dev, nlohmann-json-dev | nlohmann-json3-dev,
                googletest | libgtest-dev
 Standards-Version: 4.6.0
 Homepage: https://github.com/nixblik/gitlab-hook

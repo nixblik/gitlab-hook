@@ -40,8 +40,12 @@ auto pipeline_hook::process(http::request request, const nlohmann::json& json) c
   if (request.header("X-Gitlab-Event") != "Pipeline Hook")
     return outcome::ignored;
 
-  if (mOnlyOnSuccess && json.at("object_attributes").at("status").get_ref<const std::string&>() != "success")
+  auto& status = json.at("object_attributes").at("status").get_ref<const std::string&>();
+  if (mOnlyOnSuccess && status != "success")
+  {
+    log_debug("hook '%s': no matching status '%s'", name.c_str(), status.c_str());
     return outcome::ignored;
+  }
 
   std::vector<std::string_view> jobNames;
   std::vector<std::string> jobIds;
@@ -57,7 +61,10 @@ auto pipeline_hook::process(http::request request, const nlohmann::json& json) c
   }
 
   if (jobNames.empty())
+  {
+    log_debug("hook '%s': no matching job names", name.c_str());
     return outcome::ignored;
+  }
 
   process::environment env;
   env.set_list("CI_JOBNAMES", jobNames);

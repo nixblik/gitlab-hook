@@ -128,7 +128,7 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
   auto  self   = static_cast<impl*>(cls);
   auto& action = self->actions.front();
 
-  log_info("executing hook %s", action.name);
+  log_info("executing hook '%s'", action.name);
   fflush(stderr);
   ++actionsExecuted;
 
@@ -139,11 +139,11 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
 
     auto& action = self->actions.front();
     if (error)
-      log_error("hook %s: %s", action.name, error.message().c_str());  // hope that message() does not throw
+      log_error("hook '%s': %s", action.name, error.message().c_str());  // hope that message() does not throw
     else if (exitCode != 0)
-      log_error("hook %s: exited with code %i", action.name, exitCode);
+      log_error("hook '%s': exited with code %i", action.name, exitCode);
     else
-      log_info("completed hook %s", action.name);
+      log_info("completed hook '%s'", action.name);
 
     if (error || exitCode != 0)
     {
@@ -168,7 +168,7 @@ void action_list::impl::terminateCurrentAction(int, short, void* cls) noexcept
   auto  self   = static_cast<impl*>(cls);
   auto& action = self->actions.front();
 
-  log_error("hook %s: timed out", action.name);
+  log_error("hook '%s': timed out", action.name);
   action.process.terminate();
 
   timeval tm{};
@@ -183,7 +183,7 @@ void action_list::impl::killCurrentAction(int, short, void* cls) noexcept
   auto  self   = static_cast<impl*>(cls);
   auto& action = self->actions.front();
 
-  log_error("hook %s: killing process", action.name);
+  log_error("hook '%s': killing process", action.name);
   action.process.kill();
 
   self->actions.pop_front();

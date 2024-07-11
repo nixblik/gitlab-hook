@@ -8,6 +8,7 @@ add_executable(gitlab-hook
   http_server.h http_server.cpp
   hook.h hook.cpp
   pipeline_hook.h pipeline_hook.cpp
+  debug_hook.h debug_hook.cpp
   process.h process.cpp
   action_list.h action_list.cpp
   user_group.h user_group.cpp)

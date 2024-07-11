@@ -16,7 +16,7 @@
     with gitlab-hook. If not, see <http://www.gnu.org/licenses/>.
 */
 #include "action_list.h"
-#include "hook.h"
+#include "debug_hook.h"
 #include "log.h"
 #include "pipeline_hook.h"
 #include <arpa/inet.h>
@@ -38,7 +38,9 @@ void hook::init_global(config::item configuration)
 std::unique_ptr<hook> hook::create(config::item configuration)
 {
   auto type = configuration["type"].to_string_view();
-  if (type == "pipeline")
+  if (type == "debug")
+    return std::make_unique<debug_hook>(configuration);
+  else if (type == "pipeline")
     return std::make_unique<pipeline_hook>(configuration);
   else
     throw std::runtime_error{"invalid hook type"};
@@ -59,14 +61,19 @@ inline user_group user_group_from(config::item configuration)
 hook::hook(config::item configuration)
   : uri_path{configuration["uri_path"].to_string()},
     name{configuration["name"].to_string()},
-    mToken{configuration["token"].to_string_view()},
-    mCommand{configuration["command"].to_string_view()},
-    mTimeout{configuration["timeout"].to<std::chrono::seconds::rep>()}
+    mToken{configuration["token"].to_string_view()}
 {
   if (configuration.contains("peer_address"))
     mAllowedAddress = configuration["peer_address"].to_string_view();
 
-  if (configuration.contains("run_as") || getuid() == 0)
+  if (configuration.contains("command"))
+    mCommand = configuration["command"].to_string_view();
+
+  if (configuration.contains("timeout"))
+    mTimeout = std::chrono::seconds{configuration["timeout"].to<std::chrono::seconds::rep>()};
+
+  bool needUser = !mCommand.empty() && getuid() == 0;
+  if (configuration.contains("run_as") || needUser)
     mUserGroup = user_group_from(configuration["run_as"]);
 }
 
@@ -199,29 +206,34 @@ auto hook::execute(http::request, const nlohmann::json& json, process::environme
 {
   assert(!shellCommand.empty());
 
-  environment.set("CI_PROJECT_ID", std::to_string(json.at("project").at("id").get<int>()));
-  environment.set("CI_PROJECT_NAME", json.at("project").at("name").get_ref<const std::string&>());
-  environment.set("CI_PROJECT_SLUG", json.at("project").at("path_with_namespace").get_ref<const std::string&>());
-  environment.set("CI_GITLAB_URL", gitlabServerFrom(json));
+  if (!mCommand.empty())
+  {
+    environment.set("CI_PROJECT_ID", std::to_string(json.at("project").at("id").get<int>()));
+    environment.set("CI_PROJECT_NAME", json.at("project").at("name").get_ref<const std::string&>());
+    environment.set("CI_PROJECT_SLUG", json.at("project").at("path_with_namespace").get_ref<const std::string&>());
+    environment.set("CI_GITLAB_URL", gitlabServerFrom(json));
 
-  if (json.contains("commit"))
-    environment.set("CI_COMMIT_ID", json.at("commit").at("id").get_ref<const std::string&>());
+    if (json.contains("commit"))
+      environment.set("CI_COMMIT_ID", json.at("commit").at("id").get_ref<const std::string&>());
 
-  std::vector<std::string> args;
-  args.reserve(2);
-  args.push_back("-c");
-  args.push_back(std::string{mCommand});
+    std::vector<std::string> args;
+    args.reserve(2);
+    args.push_back("-c");
+    args.push_back(std::string{mCommand});
 
-  class process proc{action_list::get_io_context()};
-  proc.set_program(std::string{shellCommand});
-  proc.set_arguments(std::move(args));
-  proc.set_environment(std::move(environment));
-  proc.set_user_group(mUserGroup);
-  action_list::append(name.c_str(), std::move(proc), mTimeout);
+    class process proc{action_list::get_io_context()};
+    proc.set_program(std::string{shellCommand});
+    proc.set_arguments(std::move(args));
+    proc.set_environment(std::move(environment));
+    proc.set_user_group(mUserGroup);
+    action_list::append(name.c_str(), std::move(proc), mTimeout);
 
-  ++hooksScheduled;
-  log_debug("scheduled hook %s", name.c_str());
-  return outcome::accepted;
+    ++hooksScheduled;
+    log_debug("scheduled hook '%s'", name.c_str());
+    return outcome::accepted;
+  }
+  else
+    return outcome::ignored;
 }
 
 

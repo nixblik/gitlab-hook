@@ -92,6 +92,6 @@ class hook
     std::string_view mAllowedAddress;
     std::string_view mToken;
     std::string_view mCommand;
-    std::chrono::seconds mTimeout;
+    std::chrono::seconds mTimeout{60};
     user_group mUserGroup;
 };

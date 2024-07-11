@@ -31,6 +31,7 @@ class pipeline_hook : public hook
     outcome process(http::request request, const nlohmann::json& json) const override;
 
   private:
+    std::set<std::string_view> mStatuses;
     std::set<std::string_view> mJobNames;
     bool mOnlyOnSuccess;
 };

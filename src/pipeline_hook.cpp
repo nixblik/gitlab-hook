@@ -21,16 +21,27 @@
 
 
 
+static std::set<std::string_view> string_set_from(config::item configuration)
+{
+  std::set<std::string_view> result;
+
+  if (configuration.is_string())
+    result.insert(configuration.to_string_view());
+  else
+    for (size_t i = 0, endi = configuration.size(); i != endi; ++i)
+      result.insert(configuration[i].to_string_view());
+
+  return result;
+}
+
+
+
 pipeline_hook::pipeline_hook(config::item configuration)
   : hook{configuration},
-    mOnlyOnSuccess{configuration["only_on_success"].to_bool()}
+    mJobNames{string_set_from(configuration["jobname"])}
 {
-  auto jobnames = configuration["jobname"];
-  if (jobnames.is_string())
-    mJobNames.insert(jobnames.to_string_view());
-  else
-    for (size_t i = 0, endi = jobnames.size(); i != endi; ++i)
-      mJobNames.insert(jobnames[i].to_string_view());
+  if (configuration.contains("status"))
+    mStatuses = string_set_from(configuration["status"]);
 }
 
 
@@ -41,7 +52,7 @@ auto pipeline_hook::process(http::request request, const nlohmann::json& json) c
     return outcome::ignored;
 
   auto& status = json.at("object_attributes").at("status").get_ref<const std::string&>();
-  if (mOnlyOnSuccess && status != "success")
+  if (!mStatuses.empty() && !mStatuses.contains(status))
   {
     log_debug("hook '%s': no matching status '%s'", name.c_str(), status.c_str());
     return outcome::ignored;

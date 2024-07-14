@@ -208,13 +208,12 @@ auto hook::execute(http::request, const nlohmann::json& json, process::environme
 
   if (!mCommand.empty())
   {
-    environment.set("CI_PROJECT_ID", std::to_string(json.at("project").at("id").get<int>()));
-    environment.set("CI_PROJECT_NAME", json.at("project").at("name").get_ref<const std::string&>());
-    environment.set("CI_PROJECT_SLUG", json.at("project").at("path_with_namespace").get_ref<const std::string&>());
-    environment.set("CI_GITLAB_URL", gitlabServerFrom(json));
-
-    if (json.contains("commit"))
-      environment.set("CI_COMMIT_ID", json.at("commit").at("id").get_ref<const std::string&>());
+    auto& json_project = json.at("project");
+    environment.set("CI_PROJECT_ID", std::to_string(json_project.at("id").get<int>()));
+    environment.set("CI_PROJECT_PATH", json_project.at("path_with_namespace").get_ref<const std::string&>());
+    environment.set("CI_PROJECT_TITLE", json_project.at("name").get_ref<const std::string&>());
+    environment.set("CI_PROJECT_URL", json_project.at("web_url").get_ref<const std::string&>());
+    environment.set("CI_SERVER_URL", gitlabServerFrom(json));
 
     std::vector<std::string> args;
     args.reserve(2);

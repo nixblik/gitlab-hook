@@ -90,6 +90,12 @@ If all is good, navigate your browser to https://gitlab.hook.ip:8080/status
 and, after accepting the security warning caused by the self-signed
 certificate, you should see the status page of gitlab-hook.
 
+Finally, limit access to the configuration file, because it will soon contain
+sensitive information:
+
+    sudo chmod 0600 /etc/gitlab-hook/config.ini
+    
+
 ### Configuration of Hooks
 
 After that, you can configure the hooks. A hook is a path on your server that
@@ -152,6 +158,7 @@ status        | string/array | optional    | Gitlab pipeline status or array of 
 
 To aid you with debugging your hook triggers, there is a special type "debug"
 hook which writes the JSON payload received from Gitlab to gitlab-hook's log.
+
 
 ### Hook Commands
 

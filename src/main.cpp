@@ -200,7 +200,7 @@ void StatusPage::operator()(http::request request) const
  <footer class="footer mt-auto py-3">
   <div class="container">
    <span class="text-muted">
-    Gitlab-Hook v)" VERSION R"( &mdash; Copyright &copy; 2024 Uwe Salomon<br />
+    <a href="https://github.com/nixblik/gitlab-hook">Gitlab-Hook v)" VERSION R"(</a> &mdash; Copyright &copy; 2024 Uwe Salomon<br />
     This program comes with ABSOLUTELY NO WARRANTY. This is free software, and you are welcome to
     redistribute it <a href="https://www.gnu.org/licenses/gpl-3.0.en.html">under certain conditions</a>.
    </span>

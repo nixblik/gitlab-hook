@@ -9,7 +9,8 @@ These webhook event types are currently supported:
 
 - [Pipeline events](https://docs.gitlab.com/ee/user/project/integrations/webhook_events.html#pipeline-events)
 
-**NOTE** This project is not finished yet, it is under active development.
+Gitlab-hook could be extended, and it could use some regression tests. But it
+works fine for now.
 
 
 

@@ -24,11 +24,15 @@
 
 
 static log_severity log_level{log_severity::warning};
+static bool log_systemd{false};
 
 
 
 void set_log_level(log_severity severity) noexcept
 { log_level = severity; }
+
+void set_log_systemd(bool enabled) noexcept
+{ log_systemd = enabled; }
 
 
 
@@ -43,11 +47,11 @@ static void write_log_message(log_severity severity, const char* format, va_list
   const char* format2 = "%s\n";
   switch (severity)
   {
-    case log_severity::fatal:   format2 = SD_CRIT"fatal error: %s\n"; break;
-    case log_severity::error:   format2 = SD_ERR"error: %s\n"; break;
-    case log_severity::warning: format2 = SD_WARNING"warning: %s\n"; break;
-    case log_severity::info:    format2 = SD_NOTICE"%s\n"; break;
-    case log_severity::debug:   format2 = SD_DEBUG"%s\n"; break;
+    case log_severity::fatal:   format2 = log_systemd ? SD_CRIT"fatal error: %s\n" : "fatal error: %s\n"; break;
+    case log_severity::error:   format2 = log_systemd ? SD_ERR"error: %s\n" : "error: %s\n"; break;
+    case log_severity::warning: format2 = log_systemd ? SD_WARNING"warning: %s\n" : "warning: %s\n"; break;
+    case log_severity::info:    format2 = log_systemd ? SD_NOTICE"%s\n" : "%s\n"; break;
+    case log_severity::debug:   format2 = log_systemd ? SD_DEBUG"%s\n" : "%s\n"; break;
   }
 
   fprintf(stderr, format2, buffer);

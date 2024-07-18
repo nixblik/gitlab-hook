@@ -58,6 +58,7 @@ command_line::command_line(int argc, char** argv)
       ("help,h", "Show this help.")
       ("version", "Show version information.")
       ("config", value<std::string>(&configFile)->default_value(DEFAULT_CONFIG_FILE), "Sets the configuration file to use.")
+      ("systemd", "Enables systemd log message format.")
       ("verbose", value<int>(&verbosity)->implicit_value(0), "Increases the amount of log messages.");
 
   variables_map vm;
@@ -79,6 +80,9 @@ command_line::command_line(int argc, char** argv)
     std::cout << VERSION"\n";
     std::exit(0);
   }
+
+  if (vm.count("systemd"))
+    set_log_systemd(true);
 
   if (verbosity < 0)
     logLevel = log_severity::warning;

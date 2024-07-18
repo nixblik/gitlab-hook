@@ -7,7 +7,7 @@ Wants=network-online.target
 
 [Service]
 Type=notify
-ExecStart=/usr/bin/gitlab-hook
+ExecStart=/usr/bin/gitlab-hook --systemd
 WatchdogSec=5s
 Restart=always
 RestartSec=10s

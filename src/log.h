@@ -27,6 +27,10 @@ enum class log_severity
 /// Suppresses log messages below the given \a severity.
 void set_log_level(log_severity severity) noexcept;
 
+/// Sets system-d style logging \a enabled.
+void set_log_systemd(bool enabled) noexcept;
+
+
 
 /// Logs a fatal error message composed from a printf-like \a format string and
 /// the arguments. Then aborts the program.

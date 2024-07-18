@@ -218,51 +218,67 @@ int main(int argc, char** argv)
 try {
   const command_line cmdline{argc, argv};
   set_log_level(cmdline.logLevel);
-
   log_info("using configuration file %s", cmdline.configFile.c_str());
-  const auto configuration = config::file::load(cmdline.configFile);
 
   io_context io;
-  watchdog watchdog{io};
-  action_list actions{io};
-
-  signal_listener sigs{io};
-  sigs.add(SIGHUP, SIGINT, SIGTERM);
-  sigs.wait([&io](int sig)
+  for (;;)
   {
-    log_warning("signal %i raised, quit application", sig);
-    io.stop();
-  });
+    const auto configuration = config::file::load(cmdline.configFile);
+    watchdog watchdog{io};
+    action_list actions{io};
 
-  http_server httpd{configuration["httpd"], io};
-  httpd.start();
-
-  StatusPage statusPage;
-  httpd.add_handler("/status", std::ref(statusPage));
-
-  auto hooksCfg = configuration["hooks"];
-  std::vector<std::unique_ptr<hook>> hooks;
-  hooks.reserve(hooksCfg.size());
-  hook::init_global(configuration.root());
-
-  for (size_t i = 0, endi = hooksCfg.size(); i != endi; ++i)
-  {
-    auto nhook = hook::create(hooksCfg[i]);
-    auto same  = std::find_if(hooks.rbegin(), hooks.rend(), [&nhook](const std::unique_ptr<hook>& other)
-    { return nhook->uri_path == other->uri_path; });
-
-    if (same == hooks.rend())
+    signal_listener sigs1{io};
+    sigs1.add(SIGHUP, SIGINT, SIGTERM);
+    sigs1.wait([&io](int sig)
     {
-      httpd.add_handler(std::string{nhook->uri_path}, std::ref(*nhook));
-      hooks.emplace_back(std::move(nhook));
+      log_warning("signal %i raised, quit application", sig);
+      io.stop();
+    });
+
+    bool restart = false;
+    signal_listener sigs2{io};
+    sigs2.add(SIGUSR1);
+    sigs2.wait([&io, &restart](int sig)
+    {
+      log_warning("signal %i raised, reload application", sig);
+      restart = true;
+      io.stop();
+    });
+
+    http_server httpd{configuration["httpd"], io};
+    httpd.start();
+
+    StatusPage statusPage;
+    httpd.add_handler("/status", std::ref(statusPage));
+
+    auto hooksCfg = configuration["hooks"];
+    std::vector<std::unique_ptr<hook>> hooks;
+    hooks.reserve(hooksCfg.size());
+    hook::init_global(configuration.root());
+
+    for (size_t i = 0, endi = hooksCfg.size(); i != endi; ++i)
+    {
+      auto nhook = hook::create(hooksCfg[i]);
+      auto same  = std::find_if(hooks.rbegin(), hooks.rend(), [&nhook](const std::unique_ptr<hook>& other)
+      { return nhook->uri_path == other->uri_path; });
+
+      if (same == hooks.rend())
+      {
+        httpd.add_handler(std::string{nhook->uri_path}, std::ref(*nhook));
+        hooks.emplace_back(std::move(nhook));
+      }
+      else
+        (*same)->chain(std::move(nhook));
     }
-    else
-      (*same)->chain(std::move(nhook));
+
+    log_info("started gitlab-hook");
+    sd_notify(0, "READY=1\nSTATUS=Normal operation\n");
+    io.run();
+
+    if (!restart)
+      break;
   }
 
-  log_info("started gitlab-hook");
-  sd_notify(0, "READY=1\nSTATUS=Normal operation\n");
-  io.run();
   return 0;
 }
 catch (const std::exception& e)

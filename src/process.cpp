@@ -305,6 +305,11 @@ void process::list::onSigchld(int, short, void* cls) noexcept
 
 
 
+void process::environment::set(std::string_view entry)
+{ mEntries.push_back(std::string{entry}); }
+
+
+
 void process::environment::set(std::string_view var, std::string_view value)
 {
   std::string entry;

@@ -80,7 +80,6 @@ class hook
 
     static std::string to_string(const sockaddr* addr);
     static std::string_view gitlabServerFrom(const nlohmann::json& json);
-    static std::string_view shellCommand;
     static size_t hooksRequests;
     static size_t hooksGoodRequests;
     static size_t hooksScheduled;
@@ -92,6 +91,7 @@ class hook
     std::string_view mAllowedAddress;
     std::string_view mToken;
     std::string_view mCommand;
+    std::vector<std::string_view> mEnvironment;
     std::chrono::seconds mTimeout{60};
     user_group mUserGroup;
 };

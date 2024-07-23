@@ -77,17 +77,17 @@ auto pipeline_hook::process(http::request request, const nlohmann::json& json) c
     return outcome::ignored;
   }
 
-  process::environment env;
-  env.set_list("CI_JOB_IDS", jobIds);
-  env.set_list("CI_JOB_NAMES", jobNames);
+  process::environment environment;
+  environment.set_list("CI_JOB_IDS", jobIds);
+  environment.set_list("CI_JOB_NAMES", jobNames);
 
   auto& json_obj_attrs = json.at("object_attributes");
-  env.set("CI_COMMIT_REF_NAME", json_obj_attrs.at("ref").get_ref<const std::string&>());
-  env.set("CI_COMMIT_SHA", json_obj_attrs.at("sha").get_ref<const std::string&>());
-  env.set("CI_PIPELINE_ID", std::to_string(json_obj_attrs.at("id").get<uint64_t>()));
+  environment.set("CI_COMMIT_REF_NAME", json_obj_attrs.at("ref").get_ref<const std::string&>());
+  environment.set("CI_COMMIT_SHA", json_obj_attrs.at("sha").get_ref<const std::string&>());
+  environment.set("CI_PIPELINE_ID", std::to_string(json_obj_attrs.at("id").get<uint64_t>()));
 
   if (json_obj_attrs.contains("tag") && json_obj_attrs["tag"].is_string())
-    env.set("CI_COMMIT_TAG", json_obj_attrs["tag"].get_ref<const std::string&>());
+    environment.set("CI_COMMIT_TAG", json_obj_attrs["tag"].get_ref<const std::string&>());
 
-  return execute(request, json, std::move(env));
+  return execute(request, json, std::move(environment));
 }

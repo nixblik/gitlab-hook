@@ -24,14 +24,14 @@
 
 
 
-std::string_view hook::shellCommand;
 size_t hook::hooksRequests{0};
 size_t hook::hooksGoodRequests{0};
 size_t hook::hooksScheduled{0};
 
 
+
 void hook::init_global(config::item configuration)
-{ shellCommand = configuration["shell"].to_string_view(); }
+{/* no global configuration currently */}
 
 
 
@@ -58,6 +58,32 @@ inline user_group user_group_from(config::item configuration)
 
 
 
+inline std::string_view trimmed(std::string_view string) noexcept
+{
+  while (!string.empty() && std::isspace(string.front()))
+    string.remove_prefix(1);
+
+  while (!string.empty() && std::isspace(string.back()))
+    string.remove_suffix(1);
+
+  return string;
+}
+
+
+
+static std::vector<std::string_view> string_list_from(config::item configuration)
+{
+  std::vector<std::string_view> result;
+  result.reserve(configuration.size());
+
+  for (size_t i = 0, endi = configuration.size(); i != endi; ++i)
+    result.push_back(configuration[i].to_string_view());
+
+  return result;
+}
+
+
+
 hook::hook(config::item configuration)
   : uri_path{configuration["uri_path"].to_string()},
     name{configuration["name"].to_string()},
@@ -67,7 +93,10 @@ hook::hook(config::item configuration)
     mAllowedAddress = configuration["peer_address"].to_string_view();
 
   if (configuration.contains("command"))
-    mCommand = configuration["command"].to_string_view();
+    mCommand = trimmed(configuration["command"].to_string_view());
+
+  if (configuration.contains("environment"))
+    mEnvironment = string_list_from(configuration["environment"]);
 
   if (configuration.contains("timeout"))
     mTimeout = std::chrono::seconds{configuration["timeout"].to<std::chrono::seconds::rep>()};
@@ -202,10 +231,34 @@ void hook::log_request(http::request request, const std::string& peerAddress, co
 
 
 
+static std::string_view split_command(std::string_view command, std::vector<std::string>& args)
+{
+  auto space = command.find_first_of(" \t");
+  if (space == command.npos)
+    return command;
+
+  auto result = command.substr(0, space);
+  for (;;)
+  {
+    auto next = command.find_first_not_of(" \t", space);
+    if (next == command.npos)
+      break;
+
+    command = command.substr(next);
+    space   = command.find_first_of(" \t");
+
+    args.push_back(std::string{command.substr(0, space)});
+    if (space == command.npos)
+      break;
+  }
+
+  return result;
+}
+
+
+
 auto hook::execute(http::request, const nlohmann::json& json, process::environment environment) const -> outcome
 {
-  assert(!shellCommand.empty());
-
   if (!mCommand.empty())
   {
     auto& json_project = json.at("project");
@@ -215,13 +268,14 @@ auto hook::execute(http::request, const nlohmann::json& json, process::environme
     environment.set("CI_PROJECT_URL", json_project.at("web_url").get_ref<const std::string&>());
     environment.set("CI_SERVER_URL", gitlabServerFrom(json));
 
+    for (auto& entry: mEnvironment)
+      environment.set(entry);
+
     std::vector<std::string> args;
-    args.reserve(2);
-    args.push_back("-c");
-    args.push_back(std::string{mCommand});
+    auto program = split_command(mCommand, args);
 
     class process proc{action_list::get_io_context()};
-    proc.set_program(std::string{shellCommand});
+    proc.set_program(std::string{program});
     proc.set_arguments(std::move(args));
     proc.set_environment(std::move(environment));
     proc.set_user_group(mUserGroup);

@@ -90,6 +90,10 @@ class process::environment
     environment(environment&&) noexcept = default;
     environment& operator=(environment&&) noexcept = default;
 
+    /// Adds an environment variable \a entry, which must have the format
+    /// `NAME=value`. If the value is empty, the `=` must still be present.
+    void set(std::string_view entry);
+
     /// Adds an environment variable \a var with given \a value.
     void set(std::string_view var, std::string_view value);
 

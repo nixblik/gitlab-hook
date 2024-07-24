@@ -12,4 +12,5 @@ add_subdirectory(test)
 enable_testing()
 
 add_library(project INTERFACE EXCLUDE_FROM_ALL
-  README.md COPYING)
+  README.md COPYING
+  .github/workflows/build-and-test.yml)

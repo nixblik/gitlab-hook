@@ -9,8 +9,8 @@ These webhook event types are currently supported:
 
 - [Pipeline events](https://docs.gitlab.com/ee/user/project/integrations/webhook_events.html#pipeline-events)
 
-Gitlab-hook could be extended, and it could use some regression tests. But it
-works fine for now.
+Gitlab-hook could be extended, and it would benefit from some regression tests.
+But it works fine for now.
 
 
 
@@ -65,10 +65,8 @@ gitlab-hook towards Gitlab, you have to obtain a real certificate for the
 server gitlab-hook is running on.
 
 Then start writing the configuration file `/etc/gitlab-hook/config.ini`. The
-file has [TOML](https://toml.io) syntax. First write the global section and
-configure gitlab-hook's HTTP server:
-
-    shell = "/bin/sh"
+file has [TOML](https://toml.io) syntax. First write the section that
+configures gitlab-hook's HTTP server:
 
     [httpd]
     ip = "0.0.0.0"
@@ -113,7 +111,7 @@ file as follows:
     token = "t0p$ecre4"
     jobname = ["build-this", "build-that"]
     status = "success"
-    command = "echo Hello, world!"
+    command = "/usr/bin/echo Hello, world!"
     run_as.user = "nobody"
 
 Then go to your Gitlab project, and configure a webhook with URL
@@ -133,16 +131,19 @@ name          | string | mandatory   | name of the hook for gitlab-hook's log
 uri_path      | string | mandatory   | URI-Path at which the hook can be triggered on the server
 token         | string | mandatory   | secret token to authenticate Gitlab
 peer_address  | string | optional    | only allow request to hook from that IP address
-command       | string | optional    | shell command to execute
+command       | string | optional    | command to execute
+environment   | array  | optional    | list of:
+              | string | mandatory   | environment variable for the command with format `NAME=value`
 timeout       | int    | optional    | amount of seconds after which the running command will be killed
 run_as        | dict   | depends     | contains:
 run_as.user   | string | mandatory   | the Linux user account with which to execute the command
 run_as.group  | string | optional    | the Linux group with which to execute the command
 
-The timeout defaults to 60 seconds. The "run_as" entry is only optional if
-gitlab-hook is executed with a regular user account. If gitlab-hook is executed
-by root, "run_as" must be specified. To confirm that the command is to be
-executed with root privileges, you must say explicitly:
+The command must contain the full path to the executable. The timeout defaults
+to 60 seconds. The "run_as" entry is only optional if gitlab-hook is executed
+with a regular user account. If gitlab-hook is executed by root, "run_as" must
+be specified. To confirm that the command is to be executed with root
+privileges, you must say explicitly:
 
     run_as.user = "root"
 

@@ -16,12 +16,11 @@ But it works fine for now.
 
 ## Table of Contents
 
-- [Installation](#installation)
 - [Usage](#usage)
 - [Build](#build)
 
 
-
+<!--
 ## Installation
 
 On a Debian system, gitlab-hook can be installed from a PPA as follows:
@@ -32,10 +31,16 @@ On a Debian system, gitlab-hook can be installed from a PPA as follows:
 
 This will automatically enable gitlab-hook as a systemctl background service.
 The start will fail, though, until you provide a valid configuration file.
-
+-->
 
 
 ## Usage
+
+Gitlab-hook has the usual `--help` command-line option and a brève manpage.
+In a production environment, you will typically start gitlab-hook as a system
+service or daemonized docker container.
+
+### Basic Setup
 
 When starting, gitlab-hook reads a configuration file that contains a
 description of its interface towards Gitlab and its actions. The default
@@ -133,7 +138,7 @@ token         | string | mandatory   | secret token to authenticate Gitlab
 peer_address  | string | optional    | only allow request to hook from that IP address
 command       | string | optional    | command to execute
 environment   | array  | optional    | list of:
-              | string | mandatory   | environment variable for the command with format `NAME=value`
+&nbsp;        | string | mandatory   | environment variable for the command with format `NAME=value`
 timeout       | int    | optional    | amount of seconds after which the running command will be killed
 run_as        | dict   | depends     | contains:
 run_as.user   | string | mandatory   | the Linux user account with which to execute the command
@@ -194,6 +199,13 @@ CI_SERVER_URL      | all       | base URL of the GitLab instance, including prot
 
 The CI_JOB_IDS and CI_JOB_NAMES can be lists of job IDs and names, if the hook
 configuration contained a list in the "job_name" entry.
+
+
+### Debug Hook
+
+There is a special hook type "debug" that just prints the incoming JSON request
+received from Gitlab to the log. You must not configure a command for debug
+hooks.
 
 
 

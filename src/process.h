@@ -34,6 +34,9 @@ class process
     class environment;
     using handler_type = std::function<void(std::error_code, int)>;
 
+    /// Creates a null object.
+    constexpr process() noexcept = default;
+
     /// Creates a manager for a child process, with asynchronous I/O being done
     /// via the I/O \a context.
     explicit process(io_context& context);
@@ -43,6 +46,10 @@ class process
 
     /// Kills the process if it is still running.
     ~process() = default;
+
+    /// Whether this is not a null object.
+    explicit operator bool() const noexcept
+    { return !!m; }
 
     /// Sets the \a program to start.
     void set_program(std::string program) noexcept;

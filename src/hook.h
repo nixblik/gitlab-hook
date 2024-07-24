@@ -69,10 +69,13 @@ class hook
     /// in all other cases not. To be implemented in derived classes.
     virtual outcome process(http::request request, const nlohmann::json& json) const = 0;
 
-    /// Executes the hook's action (a shell script) with the given process
-    /// \a environment for the \a request. Amends the \a environment with
-    /// information from the \a request's \a json content.
+    /// Executes the hook's command with the given process \a environment for
+    /// the \a request. Amends the \a environment with information from the \a
+    /// request's \a json content.
     outcome execute(http::request request, const nlohmann::json& json, process::environment environment) const;
+
+    /// Executes the \a function for the \a request, instead of a command.
+    outcome execute(http::request request, std::function<void()> function) const;
 
   private:
     hook(const hook&) = delete;

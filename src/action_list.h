@@ -23,7 +23,8 @@ class io_context;
 
 
 
-/// A list of actions = external processes to be executed. A singleton.
+/// A list of actions = external processes or functors to be executed. This
+/// object must be created as a singleton.
 class action_list
 {
   public:
@@ -48,6 +49,10 @@ class action_list
     /// Appends a new \a process to be executed to the global list, with the
     /// hook \a name for logging purposes.
     static void append(const char* name, process process, std::chrono::seconds timeout);
+
+    /// Appends a new \a function to be executed to the global list, with the
+    /// hook \a name for logging purposes.
+    static void append(const char* name, std::function<void()> function);
 
   private:
     struct item;

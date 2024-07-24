@@ -164,9 +164,9 @@ hook which writes the JSON payload received from Gitlab to gitlab-hook's log.
 
 ### Hook Commands
 
-For your hooks, the typical command will be to invoke a shell script. We
-recommend to create a directory `/etc/gitlab-hook/scripts` and put all command
-scripts there.
+For your hooks, the typical command will be to invoke a shell script or other
+program. We recommend to create a directory `/etc/gitlab-hook/scripts` and put
+all command scripts there.
 
 Commands will not be executed concurrently. Gitlab-hook will schedule the
 commands triggered by Gitlab, and execute them one after the other. Commands

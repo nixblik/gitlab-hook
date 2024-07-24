@@ -291,6 +291,17 @@ auto hook::execute(http::request, const nlohmann::json& json, process::environme
 
 
 
+auto hook::execute(http::request, std::function<void()> function) const -> outcome
+{
+  action_list::append(name.c_str(), std::move(function));
+
+  ++hooksScheduled;
+  log_debug("scheduled hook '%s'", name.c_str());
+  return outcome::accepted;
+}
+
+
+
 std::string_view hook::gitlabServerFrom(const nlohmann::json& json)
 {
   std::string_view projectUrl = json.at("project").at("web_url").get_ref<const std::string&>();

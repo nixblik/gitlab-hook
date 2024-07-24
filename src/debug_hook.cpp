@@ -23,21 +23,27 @@
 
 debug_hook::debug_hook(config::item configuration)
   : hook{configuration}
-{}
+{
+  if (configuration.contains("command"))
+    throw std::runtime_error{"must not specify command for debug hook '" + name + "'"};
+}
 
 
 
 auto debug_hook::process(http::request request, const nlohmann::json& json) const -> outcome
 {
-  auto event = request.header("X-Gitlab-Event");
+  auto event = std::string{request.header("X-Gitlab-Event")};
+  auto sjson = json.dump(2, ' ', true, nlohmann::json::error_handler_t::replace);
 
-  printf("X-Gitlab-Event: %.*s\n"
-         "--------------------------------------------------------------------------------\n"
-         "%s\n"
-         "--------------------------------------------------------------------------------\n",
-         static_cast<int>(event.size()), event.data(),
-         json.dump(2, ' ', true, nlohmann::json::error_handler_t::replace).c_str());
+  return execute(request,
+    [event = std::move(event), json = std::move(sjson)]()
+    {
+      printf("X-Gitlab-Event: %s\n"
+             "%s\n"
+             "--------------------------------------------------------------------------------\n",
+             event.c_str(), json.c_str());
 
-  fflush(stdout);
-  return execute(request, json, process::environment{});
+      fflush(stdout);
+    }
+  );
 }

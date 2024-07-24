@@ -36,7 +36,19 @@ struct free_event
 
 struct action_list::item
 {
+  item(const char* n, process&& p, std::chrono::seconds t) noexcept
+    : name{n},
+      process{std::move(p)},
+      timeout{t}
+  {}
+
+  item(const char* n, std::function<void()>&& f) noexcept
+    : name{n},
+      function{std::move(f)}
+  {}
+
   const char* name;
+  std::function<void()> function;
   class process process;
   std::chrono::seconds timeout;
 };
@@ -56,9 +68,14 @@ struct action_list::impl
   explicit impl(io_context& context) noexcept;
   ~impl();
 
+  void executeProcess(item& action);
+  void executeFunction(item& action);
+  void finishExecuteAction() noexcept;
+
   static void executeNextAction(int, short, void* cls) noexcept;
   static void terminateCurrentAction(int, short, void* cls) noexcept;
   static void killCurrentAction(int, short, void* cls) noexcept;
+  static void addFailure() noexcept;
 };
 
 
@@ -123,6 +140,18 @@ void action_list::append(const char* name, process process, std::chrono::seconds
 
 
 
+void action_list::append(const char* name, std::function<void()> function)
+{
+  auto self = impl::singleton;
+  assert(self);
+
+  self->actions.emplace_back(name, std::move(function));
+  if (self->actions.size() == 1)
+    event_active(self->execEv.get(), 0, 0);
+}
+
+
+
 void action_list::impl::executeNextAction(int, short, void* cls) noexcept
 {
   auto  self   = static_cast<impl*>(cls);
@@ -131,15 +160,29 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
   log_info("executing hook '%s'", action.name);
   fflush(stderr);
 
-  action.process.start([self](std::error_code error, int exitCode) noexcept
+  if (action.process)
+    self->executeProcess(action);
+  else if (action.function)
+    self->executeFunction(action);
+  else
+    assert(false);
+
+  ++actionsExecuted;
+}
+
+
+
+void action_list::impl::executeProcess(item& action)
+{
+  action.process.start([this](std::error_code error, int exitCode) noexcept
   {
-    event_del(self->timeoutEv.get());
-    event_del(self->killEv.get());
+    event_del(timeoutEv.get());
+    event_del(killEv.get());
 
     fputs("--------------------------------------------------------------------------------\n", stdout);
     fflush(stdout);
 
-    auto& action = self->actions.front();
+    auto& action = actions.front();
     if (error)
       log_error("hook '%s': %s", action.name, error.message().c_str());  // hope that message() does not throw
     else if (exitCode != 0)
@@ -148,20 +191,40 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
       log_info("completed hook '%s'", action.name);
 
     if (error || exitCode != 0)
-    {
-      ++actionsFailed;
-      actionFailTm = std::time(nullptr);
-    }
+      addFailure();
 
-    self->actions.pop_front();
-    if (!self->actions.empty())
-      event_active(self->execEv.get(), 0, 0);
+    finishExecuteAction();
   });
 
   timeval tm{};
   tm.tv_sec = action.timeout.count();
-  event_add(self->timeoutEv.get(), &tm);
-  ++actionsExecuted;
+  event_add(timeoutEv.get(), &tm);
+}
+
+
+
+void action_list::impl::executeFunction(item& action)
+{
+  try {
+    action.function();
+    log_info("completed hook '%s'", action.name);
+  }
+  catch (const std::exception& e)
+  {
+    log_error("hook '%s': %s", action.name, e.what());
+    addFailure();
+  }
+
+  finishExecuteAction();
+}
+
+
+
+void action_list::impl::finishExecuteAction() noexcept
+{
+  actions.pop_front();
+  if (!actions.empty())
+    event_active(execEv.get(), 0, 0);
 }
 
 
@@ -192,4 +255,12 @@ void action_list::impl::killCurrentAction(int, short, void* cls) noexcept
   self->actions.pop_front();
   if (!self->actions.empty())
     event_active(self->execEv.get(), 0, 0);
+}
+
+
+
+inline void action_list::impl::addFailure() noexcept
+{
+  ++actionsFailed;
+  actionFailTm = std::time(nullptr);
 }

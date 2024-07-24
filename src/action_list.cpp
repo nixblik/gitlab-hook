@@ -130,12 +130,14 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
 
   log_info("executing hook '%s'", action.name);
   fflush(stderr);
-  ++actionsExecuted;
 
   action.process.start([self](std::error_code error, int exitCode) noexcept
   {
     event_del(self->timeoutEv.get());
     event_del(self->killEv.get());
+
+    fputs("--------------------------------------------------------------------------------\n", stdout);
+    fflush(stdout);
 
     auto& action = self->actions.front();
     if (error)
@@ -159,6 +161,7 @@ void action_list::impl::executeNextAction(int, short, void* cls) noexcept
   timeval tm{};
   tm.tv_sec = action.timeout.count();
   event_add(self->timeoutEv.get(), &tm);
+  ++actionsExecuted;
 }
 
 

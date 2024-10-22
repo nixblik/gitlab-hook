@@ -73,6 +73,8 @@ function(doxygen)
     add_custom_target(docs ALL
       SOURCES ${DOXYGEN_DOXYFILE} ${DOXYGEN_SOURCES}
       DEPENDS ${DOXYGEN_HTML_MARK} ${DOXYGEN_JQUERY_MARK})
+    set_property(TARGET docs
+      APPEND PROPERTY ADDITIONAL_CLEAN_FILES "${DOXYGEN_HTML_DIR}")
   else()
     message(WARNING "Could not find doxygen, will not generate documentation")
   endif()
